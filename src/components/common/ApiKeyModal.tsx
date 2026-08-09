@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Key, ShieldCheck, X, Check, Sparkles } from 'lucide-react';
 import { InterviewEngine } from '../../engine/InterviewEngine';
+import { SessionStorageService } from '../../services/storage/SessionStorageService';
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
   const [saved, setSaved] = useState(false);
 
   if (!isOpen) return null;
+
+  const usage = SessionStorageService.getDailyUsageCount();
 
   const handleSaveApiKey = () => {
     if (apiKey.trim()) {
@@ -42,17 +45,25 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
             <Key className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white font-geist">Groq API Gateway Key</h3>
-            <p className="text-[11px] text-slate-400 font-mono-vanta">Stateless Server Proxy Architecture</p>
+            <h3 className="text-lg font-bold text-white font-geist">Groq API Key & Rate Limits</h3>
+            <p className="text-[11px] text-slate-400 font-mono">Stateless Server Proxy Architecture</p>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-[#0d0e11] border border-white/10 mb-5 text-xs font-mono-vanta text-slate-300 space-y-2">
+        {/* Usage rate limit badge */}
+        <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 mb-4 font-mono text-xs text-slate-300 flex items-center justify-between">
+          <span className="text-slate-400">Daily Free Sessions:</span>
+          <span className={usage.isLimitReached ? 'text-amber-400 font-bold' : 'text-emerald-400 font-semibold'}>
+            {usage.count} / {usage.limit} Free Sessions Used Today
+          </span>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-[#0d0e11] border border-white/10 mb-5 text-xs font-mono text-slate-300 space-y-2">
           <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-            <ShieldCheck className="w-4 h-4" /> Ephemeral Gateway Isolation
+            <ShieldCheck className="w-4 h-4" /> Custom Key = Unlimited Sessions
           </div>
           <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
-            Your Groq API key is used exclusively by our server proxy to handle LLM requests. It is never exposed in the client bundle or persisted to disk.
+            Paste your personal Groq API key to unlock unlimited interview sessions without daily rate limits. Your key is kept strictly in volatile memory and is never logged or persisted.
           </p>
         </div>
 

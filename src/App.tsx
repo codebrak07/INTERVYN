@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { SessionStorageService } from './services/storage/SessionStorageService';
 import { InterviewSession, Question } from './types';
+import { IntegrityMonitor } from './services/integrity/IntegrityMonitor';
 
 // Visual & Layout Components
 import { ChamberBackground } from './components/visualizer/ChamberBackground';
@@ -9,18 +10,19 @@ import { PrivacyModal } from './components/common/PrivacyModal';
 import { ApiKeyModal } from './components/common/ApiKeyModal';
 import { ScreenShareModal } from './features/screenshare/ScreenShareModal';
 import { VSCodeBridgeModal } from './features/vscode/VSCodeBridgeModal';
+import { IntegrityWarningModal } from './components/integrity/IntegrityWarningModal';
 
-// Features Views
-import { LandingView } from './features/landing/LandingView';
-import { ResumeUploadView } from './features/onboarding/ResumeUploadView';
-import { ResumeAnalysisView } from './features/onboarding/ResumeAnalysisView';
-import { RoleSetupView } from './features/role/RoleSetupView';
-import { BlueprintView } from './features/blueprint/BlueprintView';
-import { VoiceQuestionView } from './features/interview/VoiceQuestionView';
-import { MCQQuestionView } from './features/mcq/MCQQuestionView';
-import { CodingTransitionView } from './features/coding/CodingTransitionView';
-import { CodingArenaView } from './features/coding/CodingArenaView';
-import { AssessmentReportView } from './features/report/AssessmentReportView';
+// Lazy-loaded Feature Views
+const LandingView = lazy(() => import('./features/landing/LandingView').then(m => ({ default: m.LandingView })));
+const ResumeUploadView = lazy(() => import('./features/onboarding/ResumeUploadView').then(m => ({ default: m.ResumeUploadView })));
+const ResumeAnalysisView = lazy(() => import('./features/onboarding/ResumeAnalysisView').then(m => ({ default: m.ResumeAnalysisView })));
+const RoleSetupView = lazy(() => import('./features/role/RoleSetupView').then(m => ({ default: m.RoleSetupView })));
+const BlueprintView = lazy(() => import('./features/blueprint/BlueprintView').then(m => ({ default: m.BlueprintView })));
+const VoiceQuestionView = lazy(() => import('./features/interview/VoiceQuestionView').then(m => ({ default: m.VoiceQuestionView })));
+const MCQQuestionView = lazy(() => import('./features/mcq/MCQQuestionView').then(m => ({ default: m.MCQQuestionView })));
+const CodingTransitionView = lazy(() => import('./features/coding/CodingTransitionView').then(m => ({ default: m.CodingTransitionView })));
+const CodingArenaView = lazy(() => import('./features/coding/CodingArenaView').then(m => ({ default: m.CodingArenaView })));
+const AssessmentReportView = lazy(() => import('./features/report/AssessmentReportView').then(m => ({ default: m.AssessmentReportView })));
 
 export function App() {
   const [session, setSession] = useState<InterviewSession>(SessionStorageService.getSession());
@@ -35,6 +37,16 @@ export function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    // Start integrity monitoring when interview starts
+    if (session.currentPhase !== 'LANDING' && session.currentPhase !== 'REPORT') {
+      IntegrityMonitor.startMonitoring();
+    } else {
+      IntegrityMonitor.stopMonitoring();
+    }
+    return () => IntegrityMonitor.stopMonitoring();
+  }, [session.currentPhase]);
 
   const currentQuestion: Question | undefined = session.questions[session.currentQuestionIndex];
 
@@ -140,7 +152,28 @@ export function App() {
         onOpenApiKey={() => setIsApiKeyOpen(true)}
       />
 
-      <main className="flex-1 relative z-10">{renderPhaseView()}</main>
+      <main className="flex-1 relative z-10">
+        <Suspense fallback={
+          <div className="min-h-[50vh] flex items-center justify-center font-mono text-xs text-slate-400">
+            Loading INTERVYN Module...
+          </div>
+        }>
+          {renderPhaseView()}
+        </Suspense>
+      </main>
+
+      <IntegrityWarningModal
+        integrityState={session.integrityState}
+        onAcknowledge={() => {
+          SessionStorageService.updateSession(prev => ({
+            ...prev,
+            integrityState: {
+              ...prev.integrityState,
+              status: 'NORMAL'
+            }
+          }));
+        }}
+      />
 
       <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
       <ApiKeyModal isOpen={isApiKeyOpen} onClose={() => setIsApiKeyOpen(false)} />

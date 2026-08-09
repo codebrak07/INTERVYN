@@ -17,8 +17,16 @@ export const RoleSetupView: React.FC = () => {
   const [customRole, setCustomRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [isBuilding, setIsBuilding] = useState(false);
+  const [rateLimitExceeded, setRateLimitExceeded] = useState(false);
 
   const handleGenerate = async () => {
+    const usage = SessionStorageService.getDailyUsageCount();
+    if (usage.isLimitReached) {
+      setRateLimitExceeded(true);
+      return;
+    }
+
+    SessionStorageService.incrementDailyUsage();
     const roleTitle = customRole.trim() || selectedRole;
     setIsBuilding(true);
     await InterviewEngine.setupRole(roleTitle, jobDescription.trim() || undefined);
@@ -88,6 +96,15 @@ export const RoleSetupView: React.FC = () => {
           className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-cyan-500 font-sans"
         />
       </div>
+
+      {rateLimitExceeded && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-950/40 border border-amber-800 text-amber-300 text-xs font-mono flex items-center justify-between">
+          <div>
+            <span className="font-bold block mb-1">DAILY FREE INTERVIEW LIMIT REACHED (3/3)</span>
+            <span>You have reached today's 3 free interview sessions limit. Enter your custom Groq API key in API Settings to unlock unlimited sessions.</span>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-center">
         <button

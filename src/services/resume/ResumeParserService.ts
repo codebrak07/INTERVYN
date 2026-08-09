@@ -81,10 +81,14 @@ export class ResumeParserService {
         fullText += pageText + '\n';
       }
 
-      return fullText.trim();
-    } catch (e) {
-      console.warn('PDF extraction fallback text parsing:', e);
-      return `Resume Document (${file.name})\nSkills: React, TypeScript, JavaScript, CSS, Node.js, Systems Architecture.\nExperience: Senior Frontend Engineer building scalable web products.\nProjects: Built interactive interview simulation and real-time dashboard apps.`;
+      const trimmed = fullText.trim();
+      if (!trimmed) {
+        throw new Error('PDF document appears empty or unreadable.');
+      }
+      return trimmed;
+    } catch (e: any) {
+      console.error('PDF extraction failed:', e);
+      throw new Error(`Could not extract readable text from PDF: ${e.message || 'Parse error'}`);
     }
   }
 
@@ -92,10 +96,14 @@ export class ResumeParserService {
     try {
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer });
-      return result.value.trim();
-    } catch (e) {
-      console.warn('DOCX extraction fallback:', e);
-      return `Resume Document (${file.name})\nSkills: Web Development, React, TypeScript, Algorithms.`;
+      const trimmed = (result.value || '').trim();
+      if (!trimmed) {
+        throw new Error('DOCX document contains no readable text.');
+      }
+      return trimmed;
+    } catch (e: any) {
+      console.error('DOCX extraction failed:', e);
+      throw new Error(`Could not extract readable text from DOCX: ${e.message || 'Parse error'}`);
     }
   }
 }

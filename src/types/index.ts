@@ -164,23 +164,68 @@ export interface DimensionScores {
   behavioral: number;
 }
 
-export type HiringSignal =
-  | 'Strong Hire'
-  | 'Hire'
-  | 'Leaning Hire'
-  | 'Borderline'
-  | 'Leaning No Hire'
-  | 'No Hire';
+export type IntegrityEventType =
+  | 'TAB_HIDDEN'
+  | 'WINDOW_BLUR'
+  | 'FULLSCREEN_EXIT'
+  | 'MOUSE_LEAVE'
+  | 'COPY_PASTE'
+  | 'CONTEXT_MENU'
+  | 'CAMERA_INTERRUPTED'
+  | 'SCREEN_SHARE_ENDED';
+
+export interface IntegrityEvent {
+  id: string;
+  type: IntegrityEventType;
+  timestamp: number;
+  severity: 'low' | 'medium' | 'high';
+  details: string;
+}
+
+export type IntegrityStatus = 'NORMAL' | 'WARNING_1' | 'WARNING_2' | 'TERMINATED';
+
+export interface IntegrityState {
+  violationsCount: number;
+  status: IntegrityStatus;
+  events: IntegrityEvent[];
+  terminatedReason?: string;
+}
+
+export interface CodeExecutionRequest {
+  language: string;
+  source: string;
+  testCases: TestCase[];
+  timeoutMs?: number;
+}
+
+export interface CodeExecutionResponse {
+  results: TestResult[];
+  executionTimeMs: number;
+  error?: string;
+  compilationError?: string;
+  runtimeError?: string;
+}
 
 export interface FinalReport {
   sessionId: string;
   roleTitle: string;
   overallScore: number; // 0 - 100
-  dimensionScores: DimensionScores;
-  hiringSignal: HiringSignal;
-  strongSignals: string[];
-  concerns: string[];
-  actionablePreparationPlan: string[]; // 5 clear steps
+  recommendation: 'strong_yes' | 'yes' | 'borderline' | 'no';
+  technicalScore: number;
+  communicationScore: number;
+  problemSolvingScore: number;
+  codingScore: number;
+  behavioralScore: number;
+  strengths: string[];
+  weaknesses: string[];
+  technicalGaps: string[];
+  interviewSummary: string;
+  codingAssessment: string;
+  hiringSignals: string[];
+  preparationPlan: string[];
+  evidence: string[];
+  integrityStatus: IntegrityStatus;
+  integrityEventsCount: number;
   codingPerformance?: {
     visibleTestsPassed: number;
     visibleTestsTotal: number;
@@ -201,6 +246,7 @@ export interface InterviewSession {
   sessionId: string;
   mode: InterviewMode;
   candidateProfile?: CandidateProfile;
+  resumeParseStatus?: 'PARSED' | 'INCOMPLETE' | 'FAILED' | 'NONE';
   targetRole?: TargetRole;
   blueprint?: InterviewBlueprint;
   questions: Question[];
@@ -212,4 +258,6 @@ export interface InterviewSession {
   finalReport?: FinalReport;
   groqApiKey?: string;
   screenSharingActive?: boolean;
+  integrityState: IntegrityState;
 }
+

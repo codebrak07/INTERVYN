@@ -30,11 +30,19 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
   const [showHint, setShowHint] = useState(false);
   const [startTime] = useState(Date.now());
 
+  const [lastExecutionTimeMs, setLastExecutionTimeMs] = useState<number | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+
   const handleRunVisible = async () => {
     setIsRunning(true);
+    setExecutionError(null);
     const visibleCases = problem.visibleTests || [];
-    const { results } = await CodeExecutionService.executeCode(code, visibleCases);
-    setTestResults(results);
+    const res = await CodeExecutionService.executeCode(code, visibleCases);
+    setTestResults(res.results);
+    setLastExecutionTimeMs(res.executionTimeMs);
+    if (res.error) {
+      setExecutionError(res.error);
+    }
     setIsRunning(false);
   };
 
@@ -48,30 +56,71 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
   const visibleCount = problem.visibleTests?.length || 0;
   const passedVisibleCount = testResults.filter(t => !t.isHidden && t.passed).length;
 
+  let statusText = 'READY';
+  if (isRunning || isSubmitting) statusText = 'RUNNING';
+  else if (executionError) statusText = 'EXECUTION ERROR';
+  else if (testResults.length > 0) {
+    statusText = passedVisibleCount === visibleCount ? 'PASSED' : 'FAILED';
+  }
+
   return (
     <div className="min-h-[calc(100vh-80px)] flex flex-col bg-slate-950">
-      {/* Top Banner Bar */}
-      <div className="px-6 py-3 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
+      {/* Top Telemetry Header */}
+      <div className="px-6 py-3 border-b border-slate-800 bg-slate-900/60 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-950/60 border border-emerald-800/60 flex items-center justify-center text-emerald-400 font-bold text-xs">
+          <div className="w-8 h-8 rounded-lg bg-cyan-950/60 border border-cyan-800/60 flex items-center justify-center text-cyan-400 font-bold text-xs">
             <Code className="w-4 h-4" />
           </div>
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>CODING ROUND: {problem.title}</span>
+              <span>{problem.title}</span>
               <span className="badge badge-amber text-[10px]">{problem.difficulty}</span>
             </h2>
-            <p className="text-[11px] text-slate-400 font-mono">Sandboxed Monaco Execution Arena</p>
+            <p className="text-[11px] text-slate-400 font-mono">TECHNICAL INTERVIEW INSTRUMENT</p>
           </div>
         </div>
 
+        {/* Professional Telemetry Badges */}
+        <div className="flex items-center gap-3 font-mono text-[11px]">
+          <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2">
+            <span className="text-slate-500">TESTS</span>
+            <span className={passedVisibleCount === visibleCount && testResults.length > 0 ? 'text-emerald-400 font-bold' : 'text-slate-300'}>
+              ✓ {passedVisibleCount} / {visibleCount} passed
+            </span>
+          </div>
+
+          <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2">
+            <span className="text-slate-500">RUNTIME</span>
+            <span className="text-cyan-400 font-bold">{lastExecutionTimeMs !== null ? `${lastExecutionTimeMs} ms` : '—'}</span>
+          </div>
+
+          <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2">
+            <span className="text-slate-500">LANGUAGE</span>
+            <span className="text-slate-200">TypeScript / JS</span>
+          </div>
+
+          <div className={`px-3 py-1.5 rounded-lg border font-bold flex items-center gap-2 ${
+            statusText === 'PASSED'
+              ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400'
+              : statusText === 'FAILED' || statusText === 'EXECUTION ERROR'
+              ? 'bg-rose-950/40 border-rose-800 text-rose-400'
+              : statusText === 'RUNNING'
+              ? 'bg-cyan-950/40 border-cyan-800 text-cyan-400 animate-pulse'
+              : 'bg-slate-900 border-slate-800 text-slate-400'
+          }`}>
+            <span>STATUS</span>
+            <span>{statusText}</span>
+          </div>
+        </div>
+
+        {/* Action Controls */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowHint(!showHint)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-mono border border-slate-700 transition-colors"
           >
             <Lightbulb className="w-3.5 h-3.5" />
-            <span>{showHint ? 'Hide Hint' : 'Request Conceptual Hint'}</span>
+            <span>{showHint ? 'Hide Hint' : 'Request Hint'}</span>
           </button>
 
           <button
@@ -84,7 +133,7 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
             ) : (
               <Play className="w-3.5 h-3.5 text-cyan-400 fill-current" />
             )}
-            <span>Run Code</span>
+            <span>RUN CODE</span>
           </button>
 
           <button
@@ -97,26 +146,26 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
             ) : (
               <Send className="w-3.5 h-3.5" />
             )}
-            <span>Submit Solution</span>
+            <span>SUBMIT</span>
           </button>
         </div>
       </div>
 
       {/* Main Split Grid */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
-        {/* Left Column: Problem & Constraints */}
+        {/* Left Column: Problem, Examples & Evaluation Criteria */}
         <div className="lg:col-span-5 border-r border-slate-800 p-6 overflow-y-auto max-h-[calc(100vh-140px)] bg-slate-900/30">
           {showHint && (
             <div className="mb-6 p-4 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-200 text-xs">
               <span className="font-bold block mb-1 flex items-center gap-1.5">
-                <Lightbulb className="w-4 h-4 text-amber-400" /> AI Interviewer Hint:
+                <Lightbulb className="w-4 h-4 text-amber-400" /> AI Conceptual Hint:
               </span>
-              Ensure you clean up pending timer references inside your debounced wrapper to prevent memory leaks or stale function execution.
+              Consider edge conditions such as empty inputs or zero delay values before returning your closure handler.
             </div>
           )}
 
           <h3 className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-3">
-            Problem Description
+            Problem Statement
           </h3>
           <p className="text-sm text-slate-200 leading-relaxed mb-6 whitespace-pre-line font-sans">
             {problem.description}
@@ -131,7 +180,8 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
                 {problem.examples.map((ex, idx) => (
                   <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono">
                     <p className="text-slate-300">Input: <span className="text-cyan-400">{ex.input}</span></p>
-                    <p className="text-slate-300">Output: <span className="text-emerald-400">{ex.output}</span></p>
+                    <p className="text-slate-300">Expected Output: <span className="text-emerald-400">{ex.output}</span></p>
+                    {ex.explanation && <p className="text-slate-400 text-[11px] mt-1">{ex.explanation}</p>}
                   </div>
                 ))}
               </div>
@@ -139,9 +189,9 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
           )}
 
           {problem.constraints && problem.constraints.length > 0 && (
-            <div>
+            <div className="mb-6">
               <h4 className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-2">
-                Constraints & Rules
+                Constraints
               </h4>
               <ul className="list-disc list-inside space-y-1 text-xs text-slate-400 font-mono">
                 {problem.constraints.map((c, idx) => (
@@ -150,9 +200,18 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
               </ul>
             </div>
           )}
+
+          <div>
+            <h4 className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-2">
+              Evaluation Criteria
+            </h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Your solution will be executed against visible test cases during RUN and hidden validation test cases upon SUBMIT. Metrics include correctness, runtime latency, and error handling.
+            </p>
+          </div>
         </div>
 
-        {/* Right Column: Monaco Code Editor & Test Results */}
+        {/* Right Column: Monaco Code Editor & Test Console */}
         <div className="lg:col-span-7 flex flex-col bg-slate-950 overflow-hidden">
           {/* Monaco Editor Container */}
           <div className="flex-1 min-h-[350px]">
@@ -174,11 +233,11 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
             />
           </div>
 
-          {/* Test Results Output Drawer */}
+          {/* Test Console */}
           <div className="h-56 border-t border-slate-800 bg-slate-900/90 p-4 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-xs font-mono uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <span>Test Execution Results</span>
+                <span>Test Console</span>
                 {testResults.length > 0 && (
                   <span className="text-cyan-400 font-semibold">
                     ({passedVisibleCount} / {visibleCount} passed)
@@ -187,41 +246,50 @@ export const CodingArenaView: React.FC<CodingArenaViewProps> = ({ question }) =>
               </h4>
 
               <span className="text-[10px] font-mono text-slate-500">
-                Hidden tests execute automatically on Submission
+                Hidden tests are executed on Submission
               </span>
             </div>
 
-            {testResults.length === 0 ? (
+            {executionError && (
+              <div className="mb-3 p-3 rounded-xl bg-rose-950/40 border border-rose-800/40 text-rose-300 text-xs font-mono">
+                ⚠ {executionError}
+              </div>
+            )}
+
+            {testResults.length === 0 && !executionError ? (
               <div className="h-32 flex items-center justify-center text-xs font-mono text-slate-500">
-                Click [ Run Code ] to evaluate visible test cases.
+                Click [ RUN CODE ] to execute visible test cases.
               </div>
             ) : (
               <div className="space-y-2">
                 {testResults.map(tr => (
                   <div
                     key={tr.testId}
-                    className={`p-3 rounded-xl border text-xs font-mono flex items-center justify-between ${
+                    className={`p-3 rounded-xl border text-xs font-mono ${
                       tr.passed
                         ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300'
                         : 'bg-rose-950/20 border-rose-800/40 text-rose-300'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      {tr.passed ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                      )}
-                      <div>
-                        <span className="font-bold">{tr.description}</span>
-                        {tr.error && (
-                          <p className="text-[11px] text-rose-400 mt-0.5">{tr.error}</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        {tr.passed ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
                         )}
+                        <span className="font-bold">{tr.description}</span>
                       </div>
+                      {tr.executionTimeMs !== undefined && (
+                        <span className="text-[10px] text-slate-400">{tr.executionTimeMs} ms</span>
+                      )}
                     </div>
-                    {tr.executionTimeMs !== undefined && (
-                      <span className="text-[10px] text-slate-400">{tr.executionTimeMs} ms</span>
-                    )}
+
+                    <div className="mt-2 text-[11px] space-y-0.5 text-slate-300 bg-slate-950/60 p-2 rounded-lg">
+                      <p>Actual: <span className={tr.passed ? 'text-emerald-400' : 'text-rose-400'}>{tr.actualOutput || 'N/A'}</span></p>
+                      <p>Expected: <span className="text-slate-400">{tr.expectedOutput}</span></p>
+                      {tr.error && <p className="text-rose-400 mt-1 font-semibold">Error: {tr.error}</p>}
+                    </div>
                   </div>
                 ))}
               </div>

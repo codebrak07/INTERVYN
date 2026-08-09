@@ -229,66 +229,103 @@ export class GroqProvider implements AIProvider {
     profile: CandidateProfile,
     targetRole: TargetRole,
     questions: Question[],
-    answers: AnswerRecord[]
+    answers: AnswerRecord[],
+    integrityState?: any
   ): Promise<FinalReport> {
-    const scores = answers.map(a => a.evaluation?.score || 75);
-    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 80;
+    try {
+      const res = await this.postGateway('final-report', {
+        profile,
+        targetRole,
+        questions,
+        answers,
+        integrityState
+      });
+      return {
+        ...res,
+        sessionId: `session_${Math.random().toString(36).substr(2, 9)}`,
+        roleTitle: targetRole.title,
+        totalDurationSeconds: Math.round(answers.reduce((acc, a) => acc + (a.timeSpentSeconds || 0), 0)),
+        questionsAnsweredCount: answers.length,
+        completedAt: new Date().toISOString()
+      };
+    } catch (e) {
+      console.warn('Gateway fallback for final report generation:', e);
+      const scores = answers.map(a => a.evaluation?.score || 70);
+      const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 70;
 
-    let hiringSignal: FinalReport['hiringSignal'] = 'Hire';
-    if (avgScore >= 90) hiringSignal = 'Strong Hire';
-    else if (avgScore >= 80) hiringSignal = 'Hire';
-    else if (avgScore >= 72) hiringSignal = 'Leaning Hire';
-    else if (avgScore >= 65) hiringSignal = 'Borderline';
-    else hiringSignal = 'Leaning No Hire';
+      let recommendation: FinalReport['recommendation'] = 'yes';
+      if (integrityState?.status === 'TERMINATED') {
+        recommendation = 'no';
+      } else if (avgScore >= 88) {
+        recommendation = 'strong_yes';
+      } else if (avgScore >= 75) {
+        recommendation = 'yes';
+      } else if (avgScore >= 60) {
+        recommendation = 'borderline';
+      } else {
+        recommendation = 'no';
+      }
 
-    const codingAnswer = answers.find(a => a.questionType === 'coding');
-    const visiblePassed = codingAnswer?.visiblePassed ?? 2;
-    const hiddenPassed = codingAnswer?.hiddenPassed ?? 2;
-    const totalTests = codingAnswer?.totalTests ?? 4;
+      const codingAns = answers.find(a => a.questionType === 'coding');
+      const visiblePassed = codingAns?.visiblePassed ?? 0;
+      const hiddenPassed = codingAns?.hiddenPassed ?? 0;
+      const totalTests = codingAns?.totalTests ?? 0;
+      const passRatio = totalTests > 0 ? (visiblePassed + hiddenPassed) / totalTests : 0;
 
-    return {
-      sessionId: `session_${Math.random().toString(36).substr(2, 9)}`,
-      roleTitle: targetRole.title,
-      overallScore: avgScore,
-      dimensionScores: {
-        technical: Math.min(100, avgScore + 3),
-        communication: Math.min(100, avgScore - 2),
-        problemSolving: Math.min(100, avgScore + 4),
-        coding: Math.min(100, Math.round((hiddenPassed / Math.max(1, totalTests)) * 100)),
-        systemDesign: Math.min(100, avgScore - 4),
-        behavioral: Math.min(100, avgScore + 1)
-      },
-      hiringSignal,
-      strongSignals: [
-        'Demonstrates clear understanding of JavaScript runtime queue mechanics.',
-        'Structured approach to problem solving in the sandboxed coding arena.',
-        'Clear ownership articulate in project experience claims.'
-      ],
-      concerns: [
-        'Could articulate quantitative metrics faster during architectural trade-off discussions.',
-        'Expand deeper into distributed systems & edge caching patterns.'
-      ],
-      actionablePreparationPlan: [
-        '01. Review Event Loop queue priority (Microtask vs Macrotask vs Animation Frame).',
-        '02. Practice explaining architecture trade-offs using quantitative metrics before coding.',
-        '03. Solve 3 medium coding problems emphasizing edge cases and timer cleanup.',
-        '04. Structure behavioral STAR responses to highlight explicit data-driven outcomes.',
-        '05. Practice concise 60-second technical summaries under high-pressure timing.'
-      ],
-      codingPerformance: {
-        visibleTestsPassed: visiblePassed,
-        visibleTestsTotal: codingAnswer?.visiblePassed ? codingAnswer.visiblePassed : 2,
-        hiddenTestsPassed: hiddenPassed,
-        hiddenTestsTotal: 2,
-        overallPassRatio: (visiblePassed + hiddenPassed) / Math.max(1, totalTests),
-        timeComplexity: 'O(1) invocation',
-        spaceComplexity: 'O(1) memory',
-        codeQualityScore: 88,
-        problemSolvingScore: 90
-      },
-      totalDurationSeconds: 1240,
-      questionsAnsweredCount: answers.length,
-      completedAt: new Date().toISOString()
-    };
+      return {
+        sessionId: `session_${Math.random().toString(36).substr(2, 9)}`,
+        roleTitle: targetRole.title,
+        overallScore: avgScore,
+        recommendation,
+        technicalScore: avgScore,
+        communicationScore: Math.max(50, avgScore - 4),
+        problemSolvingScore: Math.min(100, avgScore + 3),
+        codingScore: Math.round(passRatio * 100),
+        behavioralScore: Math.max(50, avgScore - 2),
+        strengths: [
+          'Demonstrates structured response delivery across technical topics.',
+          'Active problem solver working through problem statements methodically.'
+        ],
+        weaknesses: [
+          'Ensure deeper elaboration on system boundary failure modes.',
+          'Focus on writing comprehensive unit tests for edge case coverage.'
+        ],
+        technicalGaps: [
+          'Concurrent data structures & edge state synchronization.'
+        ],
+        interviewSummary: `Candidate completed ${answers.length} assessment modules. Overall performance evaluated at ${avgScore}/100.`,
+        codingAssessment: codingAns
+          ? `Code submitted passed ${visiblePassed} visible and ${hiddenPassed} hidden test cases out of ${totalTests} total.`
+          : 'No coding submission was recorded in this session.',
+        hiringSignals: [
+          `Evaluated overall score of ${avgScore}/100 based on recorded session evidence.`,
+          `Session Integrity Status: ${integrityState?.status || 'NORMAL'}`
+        ],
+        preparationPlan: [
+          '1. Practice articulating trade-offs quantitatively before choosing a solution.',
+          '2. Review microtask and macrotask event loop execution semantics.',
+          '3. Focus on error handling and timer cleanup in JavaScript async code.',
+          '4. Practice writing clean code under timed constraints.',
+          '5. Structure responses using STAR format for technical leadership questions.'
+        ],
+        evidence: answers.map(a => `Question: "${a.questionText.slice(0, 50)}..." -> Score: ${a.evaluation?.score || 'N/A'}`),
+        integrityStatus: integrityState?.status || 'NORMAL',
+        integrityEventsCount: integrityState?.events?.length || 0,
+        codingPerformance: codingAns ? {
+          visibleTestsPassed: visiblePassed,
+          visibleTestsTotal: codingAns.visiblePassed || 2,
+          hiddenTestsPassed: hiddenPassed,
+          hiddenTestsTotal: 2,
+          overallPassRatio: passRatio,
+          timeComplexity: 'O(N) runtime',
+          spaceComplexity: 'O(N) space',
+          codeQualityScore: Math.round(passRatio * 90 + 10),
+          problemSolvingScore: avgScore
+        } : undefined,
+        totalDurationSeconds: Math.round(answers.reduce((acc, a) => acc + (a.timeSpentSeconds || 0), 0)),
+        questionsAnsweredCount: answers.length,
+        completedAt: new Date().toISOString()
+      };
+    }
   }
 }

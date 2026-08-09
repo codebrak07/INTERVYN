@@ -2,16 +2,22 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export class ServerGroqProvider {
-  private apiKey: string;
+  private defaultApiKey: string;
   private model: string = 'llama-3.3-70b-versatile';
 
   constructor() {
-    this.apiKey = process.env.GROQ_API_KEY || '';
+    this.defaultApiKey = process.env.GROQ_API_KEY || '';
   }
 
-  async callGroq(messages: { role: string; content: string }[], jsonMode: boolean = true): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error('Server GROQ_API_KEY missing');
+  async callGroq(
+    messages: { role: string; content: string }[],
+    jsonMode: boolean = true,
+    customApiKey?: string
+  ): Promise<any> {
+    const activeKey = (customApiKey || '').trim() || this.defaultApiKey;
+
+    if (!activeKey) {
+      throw new Error('Groq API Key unavailable. Provide a custom key in API settings or configure server GROQ_API_KEY.');
     }
 
     const payload: any = {
@@ -27,7 +33,7 @@ export class ServerGroqProvider {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        'Authorization': `Bearer ${activeKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),

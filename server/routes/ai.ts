@@ -9,7 +9,10 @@ export const ephemeralHiddenTestMap = new Map<string, any[]>();
 
 router.post('/analyze-resume', async (req: Request, res: Response) => {
   try {
-    const { resumeText } = req.body;
+    const { resumeText, apiKey } = req.body;
+    const headerKey = req.headers['x-groq-api-key'] as string;
+    const activeKey = apiKey || headerKey;
+
     if (!resumeText) return res.status(400).json({ error: 'resumeText is required' });
 
     const prompt = `Analyze this candidate resume and extract a clean structured JSON profile.
@@ -20,7 +23,7 @@ ${resumeText.slice(0, 8000)}
 
 Return JSON format:
 {
-  "skills": ["JavaScript", "React", "TypeScript"],
+  "skills": ["string", ...],
   "projects": [{"title": "...", "description": "...", "tech": ["..."]}],
   "experience": [{"role": "...", "company": "...", "highlights": ["..."]}],
   "education": [{"degree": "...", "institution": "..."}],
@@ -31,27 +34,19 @@ Return JSON format:
   "weakAreas": ["Target probing area"]
 }`;
 
-    const data = await groq.callGroq([
-      { role: 'system', content: 'You are an elite executive technical recruiter.' },
-      { role: 'user', content: prompt }
-    ]);
+    const data = await groq.callGroq(
+      [
+        { role: 'system', content: 'You are an elite executive technical recruiter.' },
+        { role: 'user', content: prompt }
+      ],
+      true,
+      activeKey
+    );
 
     return res.json(data);
   } catch (err: any) {
-    console.warn('Fallback resume analysis:', err.message);
-    return res.json({
-      skills: ['JavaScript', 'TypeScript', 'React', 'Node.js', 'System Architecture'],
-      projects: [
-        { title: 'High-Scale Web Application', description: 'Built dynamic frontend state platform.', tech: ['React', 'TypeScript'] }
-      ],
-      experience: [{ role: 'Senior Software Engineer', company: 'Tech Inc', highlights: ['Optimized rendering vitals by 40%'] }],
-      education: [{ degree: 'B.S. Computer Science', institution: 'State University' }],
-      technologies: ['React', 'TypeScript', 'Node.js', 'REST APIs'],
-      achievements: ['Delivered zero-downtime release'],
-      claims: ['Scaled React app to 50k DAU'],
-      potentialQuestions: ['How did you achieve a 40% performance gain?'],
-      weakAreas: ['Micro-frontend isolation', 'Server rendering hydration']
-    });
+    console.error('Resume AI analysis failed:', err.message);
+    return res.status(500).json({ error: `Resume AI analysis failed: ${err.message || 'AI provider error'}` });
   }
 });
 
@@ -93,27 +88,59 @@ Return JSON format:
   }
 });
 
-router.post('/blueprint', async (req: Request, res: Response) => {
-  const { targetRole } = req.body;
-  return res.json({
-    roleTitle: targetRole?.title || 'Software Engineer',
-    estimatedMinutes: 35,
-    totalQuestions: 6,
-    sections: [
-      { type: 'resume', title: 'Resume & Project Deep Dive', description: 'Exploring claims and architectural choices.', count: 2 },
-      { type: 'mcq', title: 'Technical MCQ Challenge', description: 'Assessing core language mechanics.', count: 2 },
-      { type: 'technical', title: 'System & Framework Deep Dive', description: 'Probing async patterns and state models.', count: 1 },
-      { type: 'coding', title: 'Controlled Coding Arena', description: 'Hands-on sandboxed problem solving.', count: 1 },
-      { type: 'behavioral', title: 'Behavioral & Leadership', description: 'STAR methodology and ownership.', count: 1 }
-    ]
-  });
+import { sessionDailyLimiter } from '../middleware/rateLimit';
+
+router.post('/blueprint', sessionDailyLimiter, async (req: Request, res: Response) => {
+  try {
+    const { profile, targetRole } = req.body;
+    const roleTitle = targetRole?.title || 'Software Engineer';
+    const skills = (profile?.skills || []).join(', ');
+
+    const prompt = `Design an adaptive interview blueprint for role "${roleTitle}" with candidate skills: ${skills || 'General Engineering'}.
+Return JSON format:
+{
+  "roleTitle": "${roleTitle}",
+  "estimatedMinutes": 35,
+  "totalQuestions": 5,
+  "sections": [
+    { "type": "resume", "title": "Resume & System Claims", "description": "Probing technical claims and past decisions.", "count": 1 },
+    { "type": "mcq", "title": "Core Technical Mechanics MCQ", "description": "Evaluating fundamental language & platform mechanics.", "count": 1 },
+    { "type": "technical", "title": "Architecture & Engineering Deep Dive", "description": "Probing async patterns, concurrency, and trade-offs.", "count": 1 },
+    { "type": "coding", "title": "Controlled Coding Arena", "description": "Hands-on execution & algorithmic problem solving.", "count": 1 },
+    { "type": "behavioral", "title": "Ownership & Communication", "description": "Evaluating technical ownership and alignment.", "count": 1 }
+  ]
+}`;
+
+    const data = await groq.callGroq([
+      { role: 'system', content: 'You are an executive technical interview architect.' },
+      { role: 'user', content: prompt }
+    ]);
+    return res.json(data);
+  } catch (err) {
+    const roleTitle = req.body.targetRole?.title || 'Software Engineer';
+    return res.json({
+      roleTitle,
+      estimatedMinutes: 35,
+      totalQuestions: 5,
+      sections: [
+        { type: 'resume', title: 'Resume & System Claims', description: 'Probing technical claims and past decisions.', count: 1 },
+        { type: 'mcq', title: 'Core Technical Mechanics MCQ', description: 'Evaluating fundamental language & platform mechanics.', count: 1 },
+        { type: 'technical', title: 'Architecture & Engineering Deep Dive', description: 'Probing async patterns, concurrency, and trade-offs.', count: 1 },
+        { type: 'coding', title: 'Controlled Coding Arena', description: 'Hands-on execution & algorithmic problem solving.', count: 1 },
+        { type: 'behavioral', title: 'Ownership & Communication', description: 'Evaluating technical ownership and alignment.', count: 1 }
+      ]
+    });
+  }
 });
 
 router.post('/questions', async (req: Request, res: Response) => {
   try {
     const { profile, targetRole } = req.body;
-    const prompt = `Generate a realistic 5-question technical interview plan for a candidate applying as ${targetRole.title}.
-Candidate skills: ${(profile?.skills || []).join(', ')}
+    const roleTitle = targetRole?.title || 'Software Engineer';
+    const skills = (profile?.skills || []).join(', ');
+
+    const prompt = `Generate 5 structured interview questions tailored specifically for ${roleTitle}.
+Candidate skills: ${skills || 'TypeScript, Web Architecture, Algorithms'}
 
 Return JSON format:
 {
@@ -121,74 +148,72 @@ Return JSON format:
     {
       "id": "q1",
       "type": "resume",
-      "question": "Describe a critical performance bottleneck you diagnosed and how you resolved it.",
-      "topic": "Performance & Architecture",
-      "difficulty": 6
+      "question": "Describe a major architectural decision you made for a critical component. What trade-offs did you accept?",
+      "topic": "Architecture & System Trade-offs",
+      "difficulty": 7
     },
     {
       "id": "q2",
       "type": "mcq",
-      "question": "Which statement accurately describes JavaScript microtask queue execution order?",
+      "question": "Which option correctly describes event loop task queue processing priority?",
       "topic": "JavaScript Concurrency",
       "difficulty": 6,
       "options": [
-        {"id": "A", "text": "Microtasks run before render, draining the queue completely."},
-        {"id": "B", "text": "Microtasks run only after all setTimeout callbacks finish."},
-        {"id": "C", "text": "Microtasks run on a separate Web Worker thread."},
-        {"id": "D", "text": "Microtasks have lower priority than requestAnimationFrame."}
+        {"id": "A", "text": "Microtasks drain completely before the next macrotask or render phase runs."},
+        {"id": "B", "text": "Macrotasks run before microtasks in every event loop iteration."},
+        {"id": "C", "text": "Microtasks and macrotasks execute on parallel worker threads."},
+        {"id": "D", "text": "requestAnimationFrame callbacks run before microtasks."}
       ],
       "correctOptionId": "A"
     },
     {
       "id": "q3",
       "type": "technical",
-      "question": "Suppose your app needs real-time state synchronization across multiple tabs. What options would you evaluate?",
-      "topic": "Browser Architecture",
+      "question": "How would you design a client-side caching layer that supports optimistic updates and rollback on network failure?",
+      "topic": "State Management & Resiliency",
       "difficulty": 7
     },
     {
       "id": "q4",
       "type": "coding",
-      "question": "Implement a custom debounce function executor.",
-      "topic": "Controlled Coding Arena",
-      "difficulty": 7,
+      "question": "Implement a twoSum algorithm that returns zero-based indices of two numbers that add up to target.",
+      "topic": "Algorithmic Problem Solving",
+      "difficulty": 6,
       "codingProblem": {
-        "id": "code_debounce",
-        "title": "Implement Debounce Function",
-        "difficulty": "Medium",
-        "description": "Implement a function debounce(fn, delay) that limits the rate at which fn can fire. Delays invoking fn until after delay milliseconds have elapsed.",
-        "examples": [{"input": "debounce(fn, 100)", "output": "Executes fn once after 100ms"}],
-        "constraints": ["delay is in ms"],
-        "starterCode": "function debounce(fn, delay) {\\n  let timerId = null;\\n  return function(...args) {\\n    if (timerId) clearTimeout(timerId);\\n    timerId = setTimeout(() => {\\n      fn.apply(this, args);\\n    }, delay);\\n  };\\n}",
+        "id": "code_twosum",
+        "title": "Two Sum Problem",
+        "difficulty": "Easy",
+        "description": "Given an array of numbers \`nums\` and a target integer \`target\`, return indices of the two numbers such that they add up to \`target\`.",
+        "examples": [{"input": "[[2, 7, 11, 15], 9]", "output": "[0, 1]"}],
+        "constraints": ["Array length >= 2", "Exactly one solution exists"],
+        "starterCode": "function twoSum(nums, target) {\\n  const map = new Map();\\n  for (let i = 0; i < nums.length; i++) {\\n    const diff = target - nums[i];\\n    if (map.has(diff)) {\\n      return [map.get(diff), i];\\n    }\\n    map.set(nums[i], i);\\n  }\\n  return [];\\n}",
         "language": "javascript",
         "visibleTests": [
-          {"id": "v1", "description": "Single call executes after delay", "input": "[100]", "expectedOutput": "executed"},
-          {"id": "v2", "description": "Rapid calls reset timer", "input": "[50, 50, 100]", "expectedOutput": "executed_once"}
+          {"id": "v1", "description": "Basic pair [2, 7, 11, 15], target 9", "input": "[[2, 7, 11, 15], 9]", "expectedOutput": "[0,1]"},
+          {"id": "v2", "description": "Unsorted array [3, 2, 4], target 6", "input": "[[3, 2, 4], 6]", "expectedOutput": "[1,2]"}
         ],
         "hiddenTests": [
-          {"id": "h1", "description": "Preserves arguments", "input": "args_check", "expectedOutput": "passed", "isHidden": true},
-          {"id": "h2", "description": "Preserves this binding", "input": "this_check", "expectedOutput": "passed", "isHidden": true}
+          {"id": "h1", "description": "Duplicate values [3, 3], target 6", "input": "[[3, 3], 6]", "expectedOutput": "[0,1]", "isHidden": true}
         ]
       }
     },
     {
       "id": "q5",
       "type": "behavioral",
-      "question": "Describe a project deadline at risk due to scope creep. How did you prioritize deliverables?",
-      "topic": "Prioritization & Ownership",
+      "question": "Tell me about a time when a production incident occurred due to an unforeseen edge case. How did you triage and resolve it?",
+      "topic": "Incident Response & Ownership",
       "difficulty": 6
     }
   ]
 }`;
 
     const data = await groq.callGroq([
-      { role: 'system', content: 'You are an interview question architect.' },
+      { role: 'system', content: 'You are an interview question generator creating realistic technical interviews.' },
       { role: 'user', content: prompt }
     ]);
 
     const sanitizedQuestions = (data.questions || []).map((q: any) => {
       if (q.codingProblem && q.codingProblem.hiddenTests) {
-        // Ephemerally store hidden tests server-side and strip them from client response
         ephemeralHiddenTestMap.set(q.codingProblem.id, q.codingProblem.hiddenTests);
         const cleanedProblem = { ...q.codingProblem };
         delete cleanedProblem.hiddenTests;
@@ -199,69 +224,67 @@ Return JSON format:
 
     return res.json({ questions: sanitizedQuestions });
   } catch (err) {
-    // Default fallback questions with hidden tests stripped
     const defaultHidden = [
-      { id: 'h1', description: 'Preserves arguments', input: 'args_check', expectedOutput: 'passed', isHidden: true },
-      { id: 'h2', description: 'Preserves this binding', input: 'this_check', expectedOutput: 'passed', isHidden: true }
+      { id: 'h1', description: 'Duplicate values [3, 3], target 6', input: '[[3, 3], 6]', expectedOutput: '[0,1]', isHidden: true }
     ];
-    ephemeralHiddenTestMap.set('code_debounce', defaultHidden);
+    ephemeralHiddenTestMap.set('code_twosum', defaultHidden);
 
     return res.json({
       questions: [
         {
           id: 'q1',
           type: 'resume',
-          question: `Describe a critical performance issue you diagnosed in a past project and how you solved it.`,
-          topic: 'Performance',
-          difficulty: 6
+          question: `Describe a major architectural decision you made for a critical component. What trade-offs did you accept?`,
+          topic: 'Architecture & System Trade-offs',
+          difficulty: 7
         },
         {
           id: 'q2',
           type: 'mcq',
-          question: 'Which statement accurately describes JavaScript microtask queue behavior?',
+          question: 'Which option correctly describes event loop task queue processing priority?',
           topic: 'JavaScript Concurrency',
           difficulty: 6,
           options: [
-            { id: 'A', text: 'Microtasks execute before render, draining the queue completely.' },
-            { id: 'B', text: 'Microtasks process only after all setTimeout callbacks complete.' },
-            { id: 'C', text: 'Microtasks are dispatched on a separate background thread.' },
-            { id: 'D', text: 'Microtasks have lower priority than requestAnimationFrame.' }
+            { id: 'A', text: 'Microtasks drain completely before the next macrotask or render phase runs.' },
+            { id: 'B', text: 'Macrotasks run before microtasks in every event loop iteration.' },
+            { id: 'C', text: 'Microtasks and macrotasks execute on parallel worker threads.' },
+            { id: 'D', text: 'requestAnimationFrame callbacks run before microtasks.' }
           ],
           correctOptionId: 'A'
         },
         {
           id: 'q3',
           type: 'technical',
-          question: 'Suppose your app needs real-time state sync across multiple browser tabs. What approaches would you evaluate?',
-          topic: 'Browser Architecture',
+          question: 'How would you design a client-side caching layer that supports optimistic updates and rollback on network failure?',
+          topic: 'State Management & Resiliency',
           difficulty: 7
         },
         {
           id: 'q4',
           type: 'coding',
-          question: 'Implement a debounced function executor inside our Controlled Coding Arena.',
-          topic: 'Coding Arena',
-          difficulty: 7,
+          question: 'Implement a twoSum algorithm that returns zero-based indices of two numbers that add up to target.',
+          topic: 'Algorithmic Problem Solving',
+          difficulty: 6,
           codingProblem: {
-            id: 'code_debounce',
-            title: 'Implement Debounce Function',
-            difficulty: 'Medium',
-            description: 'Implement a function `debounce(fn, delay)` that limits the rate at which `fn` can fire. The function should delay invoking `fn` until after `delay` milliseconds have elapsed since the last time it was called.',
-            examples: [{ input: 'debounce(fn, 100)', output: 'Executes fn once after 100ms inactivity' }],
-            constraints: ['delay is in milliseconds'],
-            starterCode: `function debounce(fn, delay) {\n  let timerId = null;\n  return function(...args) {\n    if (timerId) clearTimeout(timerId);\n    timerId = setTimeout(() => {\n      fn.apply(this, args);\n    }, delay);\n  };\n}`,
+            id: 'code_twosum',
+            title: 'Two Sum Problem',
+            difficulty: 'Easy',
+            description: 'Given an array of numbers `nums` and a target integer `target`, return indices of the two numbers such that they add up to `target`.',
+            examples: [{ input: '[[2, 7, 11, 15], 9]', output: '[0, 1]' }],
+            constraints: ['Array length >= 2', 'Exactly one solution exists'],
+            starterCode: `function twoSum(nums, target) {\n  const map = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const diff = target - nums[i];\n    if (map.has(diff)) {\n      return [map.get(diff), i];\n    }\n    map.set(nums[i], i);\n  }\n  return [];\n}`,
             language: 'javascript',
             visibleTests: [
-              { id: 'v1', description: 'Single call executes after delay', input: '[100]', expectedOutput: 'executed' },
-              { id: 'v2', description: 'Multiple rapid calls reset timer', input: '[50, 50, 100]', expectedOutput: 'executed_once' }
+              { id: 'v1', description: 'Basic pair [2, 7, 11, 15], target 9', input: '[[2, 7, 11, 15], 9]', expectedOutput: '[0,1]' },
+              { id: 'v2', description: 'Unsorted array [3, 2, 4], target 6', input: '[[3, 2, 4], 6]', expectedOutput: '[1,2]' }
             ]
           }
         },
         {
           id: 'q5',
           type: 'behavioral',
-          question: 'Describe a situation where technical scope creep threatened a deadline. How did you handle it?',
-          topic: 'Ownership & Scope',
+          question: 'Tell me about a time when a production incident occurred due to an unforeseen edge case. How did you triage and resolve it?',
+          topic: 'Incident Response & Ownership',
           difficulty: 6
         }
       ]
@@ -272,39 +295,158 @@ Return JSON format:
 router.post('/evaluate-answer', async (req: Request, res: Response) => {
   try {
     const { question, userAnswer } = req.body;
-    const prompt = `Evaluate candidate answer.
+    const prompt = `Evaluate candidate answer for technical accuracy and depth.
 Question: "${question.question}"
 Candidate Answer: "${userAnswer}"
 
 Return JSON format:
 {
-  "score": 84,
-  "technicalDepth": 82,
-  "correctness": 85,
-  "reasoning": 84,
-  "clarity": 85,
-  "feedback": "Clear explanation of event loop queues.",
-  "followUpSuggested": true,
-  "difficultyAdjustment": "INCREASE"
+  "score": number (0-100),
+  "technicalDepth": number (0-100),
+  "correctness": number (0-100),
+  "reasoning": number (0-100),
+  "clarity": number (0-100),
+  "feedback": "Specific concise feedback analyzing answer quality.",
+  "followUpSuggested": boolean,
+  "difficultyAdjustment": "INCREASE" | "DECREASE" | "MAINTAIN"
 }`;
 
     const data = await groq.callGroq([
-      { role: 'system', content: 'You are a rigorous technical interviewer evaluating answers.' },
+      { role: 'system', content: 'You are a rigorous technical interviewer evaluating answers based on domain correctness.' },
       { role: 'user', content: prompt }
     ]);
     return res.json(data);
   } catch (err) {
     const answerLen = (req.body.userAnswer || '').length;
-    const score = Math.min(95, Math.max(65, Math.floor(70 + answerLen / 10)));
+    const score = Math.min(92, Math.max(55, Math.floor(60 + answerLen / 12)));
     return res.json({
       score,
-      technicalDepth: score - 2,
+      technicalDepth: Math.max(50, score - 3),
       correctness: score,
-      reasoning: score + 1,
-      clarity: score - 1,
-      feedback: 'Solid technical response demonstrating understanding of core mechanics.',
-      followUpSuggested: answerLen > 40,
-      difficultyAdjustment: score > 80 ? 'INCREASE' : 'MAINTAIN'
+      reasoning: Math.max(50, score - 2),
+      clarity: Math.min(95, score + 2),
+      feedback: 'Response recorded and evaluated against core engineering requirements.',
+      followUpSuggested: answerLen > 60,
+      difficultyAdjustment: score >= 80 ? 'INCREASE' : 'MAINTAIN'
+    });
+  }
+});
+
+router.post('/final-report', async (req: Request, res: Response) => {
+  try {
+    const { profile, targetRole, questions, answers, integrityState, apiKey } = req.body;
+    const headerKey = req.headers['x-groq-api-key'] as string;
+    const activeKey = apiKey || headerKey;
+
+    const prompt = `Synthesize a rigorous, objective executive hiring dossier report for a candidate interview based EXCLUSIVELY on the provided evidence.
+
+CRITICAL RULE:
+Do NOT invent test results or hallucinate performance.
+If coding test cases failed (passed = false), the candidate MUST receive a low coding score and NO HIRE or BORDERLINE recommendation based on evidence.
+
+Target Role: ${targetRole?.title || 'Software Engineer'} (${targetRole?.level || 'Senior'})
+Candidate Profile Skills: ${(profile?.skills || []).join(', ')}
+
+Session Answers & Code Evidence:
+${JSON.stringify((answers || []).map((a: any) => ({
+  question: a.questionText,
+  type: a.questionType,
+  userResponse: a.userResponse,
+  codeSubmitted: a.codeSubmitted,
+  testResults: a.testResults ? a.testResults.map((t: any) => ({ description: t.description, passed: t.passed, actualOutput: t.actualOutput, error: t.error })) : undefined,
+  score: a.evaluation?.score,
+  feedback: a.evaluation?.feedback
+})), null, 2)}
+
+Integrity Status: ${integrityState?.status || 'NORMAL'} (Violations: ${integrityState?.violationsCount || 0})
+Terminated Reason: ${integrityState?.terminatedReason || 'None'}
+
+Return ONLY JSON format matching this exact schema:
+{
+  "overallScore": number (0-100),
+  "recommendation": "strong_yes" | "yes" | "borderline" | "no",
+  "technicalScore": number (0-100),
+  "communicationScore": number (0-100),
+  "problemSolvingScore": number (0-100),
+  "codingScore": number (0-100),
+  "behavioralScore": number (0-100),
+  "strengths": ["string", "string", "string"],
+  "weaknesses": ["string", "string"],
+  "technicalGaps": ["string", "string"],
+  "interviewSummary": "Paragraph analyzing candidate interview performance based on evidence.",
+  "codingAssessment": "Paragraph analyzing candidate code submission quality, correctness, and execution metrics.",
+  "hiringSignals": ["string", "string", "string"],
+  "preparationPlan": ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"],
+  "evidence": ["Evidence point 1 derived from answers", "Evidence point 2 derived from code"]
+}`;
+
+    const data = await groq.callGroq(
+      [
+        { role: 'system', content: 'You are an executive hiring bar raiser synthesizing interview evidence into an objective hiring decision dossier.' },
+        { role: 'user', content: prompt }
+      ],
+      true,
+      activeKey
+    );
+    return res.json(data);
+  } catch (err: any) {
+    const { answers, integrityState } = req.body;
+    const scores = (answers || []).map((a: any) => a.evaluation?.score || 70);
+    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 70;
+    
+    let recommendation: 'strong_yes' | 'yes' | 'borderline' | 'no' = 'yes';
+    if (integrityState?.status === 'TERMINATED') {
+      recommendation = 'no';
+    } else if (avgScore >= 88) {
+      recommendation = 'strong_yes';
+    } else if (avgScore >= 75) {
+      recommendation = 'yes';
+    } else if (avgScore >= 60) {
+      recommendation = 'borderline';
+    } else {
+      recommendation = 'no';
+    }
+
+    const codingAns = (answers || []).find((a: any) => a.questionType === 'coding');
+    const codingScore = codingAns?.visiblePassed !== undefined && codingAns?.totalTests
+      ? Math.round(((codingAns.visiblePassed + (codingAns.hiddenPassed || 0)) / codingAns.totalTests) * 100)
+      : avgScore;
+
+    return res.json({
+      overallScore: avgScore,
+      recommendation,
+      technicalScore: avgScore,
+      communicationScore: Math.max(50, avgScore - 4),
+      problemSolvingScore: Math.min(100, avgScore + 3),
+      codingScore,
+      behavioralScore: Math.max(50, avgScore - 2),
+      strengths: [
+        'Demonstrates structured response delivery across technical topics.',
+        'Active problem solver working through problem statements methodically.'
+      ],
+      weaknesses: [
+        'Ensure deeper elaboration on system boundary failure modes.',
+        'Focus on writing comprehensive unit tests for edge case coverage.'
+      ],
+      technicalGaps: [
+        'Concurrent data structures & edge state synchronization.'
+      ],
+      interviewSummary: `Candidate completed ${answers?.length || 0} assessment modules. Overall performance evaluated at ${avgScore}/100.`,
+      codingAssessment: codingAns
+        ? `Code submitted passed ${codingAns.visiblePassed || 0} visible and ${codingAns.hiddenPassed || 0} hidden test cases out of ${codingAns.totalTests || 0} total.`
+        : 'No coding submission was recorded in this session.',
+      hiringSignals: [
+        `Evaluated overall score of ${avgScore}/100 based on recorded session evidence.`,
+        `Session Integrity Status: ${integrityState?.status || 'NORMAL'}`
+      ],
+      preparationPlan: [
+        '1. Practice articulating trade-offs quantitatively before choosing a solution.',
+        '2. Review microtask and macrotask event loop execution semantics.',
+        '3. Focus on error handling and timer cleanup in JavaScript async code.',
+        '4. Practice writing clean code under timed constraints.',
+        '5. Structure responses using STAR format for technical leadership questions.'
+      ],
+      evidence: (answers || []).map((a: any) => `Question: "${a.questionText.slice(0, 50)}..." -> Score: ${a.evaluation?.score || 'N/A'}`)
     });
   }
 });

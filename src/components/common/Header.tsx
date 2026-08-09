@@ -49,8 +49,41 @@ export const Header: React.FC<HeaderProps> = ({
     setShowArchiveNotice(true);
   };
 
+  const getChapterTag = (phase: InterviewPhase) => {
+    switch (phase) {
+      case 'RESUME_UPLOAD':
+      case 'RESUME_ANALYZING':
+        return '01 / INGESTION';
+      case 'ROLE_SETUP':
+      case 'BLUEPRINT_READY':
+        return '02 / CALIBRATION';
+      case 'QUESTION_VOICE':
+      case 'LISTENING':
+      case 'TRANSCRIBING':
+        return '03 / INTERVIEW';
+      case 'EVALUATING':
+      case 'MCQ_ROUND':
+      case 'BEHAVIORAL_ROUND':
+        return '04 / EVALUATION';
+      case 'CODING_TRANSITION':
+      case 'CODING_ARENA':
+      case 'RUNNING_TESTS':
+      case 'SUBMITTING_HIDDEN':
+        return '05 / CODING';
+      case 'FINAL_EVALUATION':
+      case 'REPORT':
+        return '06 / ASSESSMENT';
+      default:
+        return null;
+    }
+  };
+
+  const chapterTag = getChapterTag(currentPhase);
+  const session = SessionStorageService.getSession();
+  const apiKeyMode = session.groqApiKey ? 'CUSTOM KEY ACTIVE' : 'SERVER MANAGED KEY';
+
   return (
-    <header className="relative z-40 flex justify-between items-center w-full px-6 md:px-16 py-4 border-b border-slate-900/[0.08] bg-[#F5F6F3]/90 backdrop-blur-md">
+    <header className="relative z-40 flex justify-between items-center w-full px-6 md:px-16 py-4 border-b border-slate-200/80 bg-[#F5F6F3]/90 backdrop-blur-md">
       {/* Brand & Logo */}
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => SessionStorageService.setPhase('LANDING')}>
         <img
@@ -59,10 +92,16 @@ export const Header: React.FC<HeaderProps> = ({
           className="h-8 w-auto object-contain"
         />
         <div className="flex items-baseline gap-2">
-          <span className="font-geist text-2xl font-bold tracking-tighter text-[#0F172A]">INTERVYN</span>
-          <span className="font-mono-intervyn text-[10px] text-slate-500 hidden md:inline-block border border-slate-300 px-2 py-0.5 rounded tracking-wider">
-            AI INTERVIEW SIMULATOR
-          </span>
+          <span className="font-serif italic text-2xl font-bold tracking-tight text-[#0F172A]">INTERVYN</span>
+          {chapterTag ? (
+            <span className="font-mono text-[10px] text-cyan-800 bg-cyan-950/10 border border-cyan-800/30 px-2 py-0.5 rounded tracking-wider">
+              {chapterTag}
+            </span>
+          ) : (
+            <span className="font-mono text-[10px] text-slate-500 hidden md:inline-block border border-slate-300 px-2 py-0.5 rounded tracking-wider">
+              TECHNICAL ASSESSMENT INSTRUMENT
+            </span>
+          )}
         </div>
       </div>
 
@@ -72,19 +111,19 @@ export const Header: React.FC<HeaderProps> = ({
           <>
             <button
               onClick={handleStartSession}
-              className="font-mono-intervyn text-xs text-[#475569] hover:text-[#0891B2] transition-colors uppercase cursor-pointer bg-transparent border-none font-medium"
+              className="font-mono text-xs text-[#475569] hover:text-[#0891B2] transition-colors uppercase cursor-pointer bg-transparent border-none font-medium"
             >
               SIMULATIONS
             </button>
             <button
               onClick={handleArchiveClick}
-              className="font-mono-intervyn text-xs text-[#475569] hover:text-[#0891B2] transition-colors uppercase cursor-pointer bg-transparent border-none font-medium"
+              className="font-mono text-xs text-[#475569] hover:text-[#0891B2] transition-colors uppercase cursor-pointer bg-transparent border-none font-medium"
             >
               ARCHIVE
             </button>
             <button
               onClick={handleStartSession}
-              className="font-mono-intervyn text-xs text-[#475569] hover:text-[#0891B2] transition-colors uppercase cursor-pointer bg-transparent border-none font-medium"
+              className="font-mono text-xs text-[#475569] hover:text-[#0891B2] transition-colors uppercase cursor-pointer bg-transparent border-none font-medium"
             >
               SESSIONS
             </button>
@@ -101,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#FFFFFF] hover:bg-slate-50 border border-slate-200 text-xs text-slate-700 font-mono transition-colors shadow-sm"
             >
               <Video className="w-3.5 h-3.5 text-cyan-600" />
-              <span>Screen Share</span>
+              <span>{session.screenSharingActive ? 'SCREEN SHARED' : 'Screen Share'}</span>
             </button>
 
             <button
@@ -127,10 +166,11 @@ export const Header: React.FC<HeaderProps> = ({
 
         <button
           onClick={onOpenApiKey}
-          className="p-1.5 rounded bg-[#FFFFFF] hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs flex items-center gap-1 transition-colors hover:border-amber-400/50 shadow-sm"
-          title="Configure Groq API Key"
+          className="p-1.5 rounded bg-[#FFFFFF] hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs flex items-center gap-1.5 transition-colors hover:border-amber-400/50 shadow-sm font-mono"
+          title={`API Key Mode: ${apiKeyMode}`}
         >
           <Key className="w-3.5 h-3.5 text-amber-500" />
+          <span className="hidden lg:inline text-[10px] text-slate-500">{apiKeyMode}</span>
         </button>
 
         {currentPhase === 'LANDING' ? (

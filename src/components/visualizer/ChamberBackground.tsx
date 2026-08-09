@@ -20,6 +20,35 @@ export const ChamberBackground: React.FC<ChamberBackgroundProps> = ({
     currentPhase === 'RUNNING_TESTS' ||
     currentPhase === 'SUBMITTING_HIDDEN';
 
+  const getChapterMarker = (phase?: InterviewPhase) => {
+    switch (phase) {
+      case 'RESUME_UPLOAD':
+      case 'RESUME_ANALYZING':
+        return 'CHAPTER 01 / INGESTION';
+      case 'ROLE_SETUP':
+      case 'BLUEPRINT_READY':
+        return 'CHAPTER 02 / CALIBRATION';
+      case 'QUESTION_VOICE':
+      case 'LISTENING':
+      case 'TRANSCRIBING':
+        return 'CHAPTER 03 / INTERVIEW';
+      case 'EVALUATING':
+      case 'MCQ_ROUND':
+      case 'BEHAVIORAL_ROUND':
+        return 'CHAPTER 04 / EVALUATION';
+      case 'CODING_TRANSITION':
+      case 'CODING_ARENA':
+      case 'RUNNING_TESTS':
+      case 'SUBMITTING_HIDDEN':
+        return 'CHAPTER 05 / CODING';
+      case 'FINAL_EVALUATION':
+      case 'REPORT':
+        return 'CHAPTER 06 / ASSESSMENT';
+      default:
+        return 'CHAPTER 00 / PROLOGUE';
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#F6F7F5] transition-colors duration-1000">
       {/* 95% OFF-WHITE / NEUTRAL MATERIAL TONAL LAYER */}
@@ -65,12 +94,12 @@ export const ChamberBackground: React.FC<ChamberBackgroundProps> = ({
         <div className="w-px h-[65vh] bg-gradient-to-b from-slate-900/[0.03] via-transparent to-transparent hidden lg:block"></div>
       </div>
 
-      {/* EDITORIAL FOOTNOTE MARKERS AT THE BOTTOM */}
-      <div className="absolute bottom-6 left-16 hidden md:block font-mono-intervyn text-[9px] text-[#64727A]/30 tracking-[0.16em] uppercase">
-        01 / INTERVIEW FIELD
+      {/* EDITORIAL CHAPTER MARKERS AT THE BOTTOM */}
+      <div className="absolute bottom-6 left-16 hidden md:block font-mono text-[10px] text-slate-400/60 tracking-[0.16em] uppercase">
+        {getChapterMarker(currentPhase)}
       </div>
-      <div className="absolute bottom-6 right-16 hidden md:block font-mono-intervyn text-[9px] text-[#64727A]/30 tracking-[0.16em] uppercase">
-        SESSION ARCHITECTURE
+      <div className="absolute bottom-6 right-16 hidden md:block font-mono text-[10px] text-slate-400/60 tracking-[0.16em] uppercase">
+        PRIVATE ASSESSMENT INSTRUMENT
       </div>
     </div>
   );

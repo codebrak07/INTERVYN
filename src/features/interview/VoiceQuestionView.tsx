@@ -27,6 +27,15 @@ export const VoiceQuestionView: React.FC<VoiceQuestionViewProps> = ({
   const ttsRef = useRef<TextToSpeechService | null>(null);
   const sttRef = useRef<SpeechToTextService | null>(null);
 
+  const speakQuestion = React.useCallback(() => {
+    if (ttsRef.current) {
+      ttsRef.current.speak(question.question, {
+        onStart: () => setTtsState('SPEAKING'),
+        onEnd: () => setTtsState('IDLE'),
+      });
+    }
+  }, [question.question]);
+
   useEffect(() => {
     ttsRef.current = new TextToSpeechService();
     sttRef.current = new SpeechToTextService();
@@ -37,23 +46,13 @@ export const VoiceQuestionView: React.FC<VoiceQuestionViewProps> = ({
       onError: err => console.warn('STT Error:', err),
     });
 
-    // Automatically speak question when loaded
     speakQuestion();
 
     return () => {
       ttsRef.current?.cancel();
       sttRef.current?.reset();
     };
-  }, [question.id]);
-
-  const speakQuestion = () => {
-    if (ttsRef.current) {
-      ttsRef.current.speak(question.question, {
-        onStart: () => setTtsState('SPEAKING'),
-        onEnd: () => setTtsState('IDLE'),
-      });
-    }
-  };
+  }, [question.id, speakQuestion]);
 
   const handleToggleMic = () => {
     if (!sttRef.current) return;

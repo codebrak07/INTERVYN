@@ -21,13 +21,32 @@ export class InterviewEngine {
 
   static async processResume(resumeText: string): Promise<CandidateProfile> {
     SessionStorageService.setPhase('RESUME_ANALYZING');
-    const profile = await this.groqProvider.analyzeResume(resumeText);
+    try {
+      const profile = await this.groqProvider.analyzeResume(resumeText);
+      SessionStorageService.updateSession(prev => ({
+        ...prev,
+        candidateProfile: profile,
+        resumeParseStatus: 'PARSED',
+        currentPhase: 'ROLE_SETUP',
+      }));
+      return profile;
+    } catch (err) {
+      SessionStorageService.updateSession(prev => ({
+        ...prev,
+        resumeParseStatus: 'FAILED',
+        currentPhase: 'RESUME_UPLOAD',
+      }));
+      throw err;
+    }
+  }
+
+  static skipResumeUpload() {
     SessionStorageService.updateSession(prev => ({
       ...prev,
-      candidateProfile: profile,
+      candidateProfile: undefined,
+      resumeParseStatus: 'INCOMPLETE',
       currentPhase: 'ROLE_SETUP',
     }));
-    return profile;
   }
 
   static async setupRole(targetRoleTitle: string, jobDescription?: string) {
@@ -273,7 +292,8 @@ export class InterviewEngine {
       profile,
       targetRole,
       session.questions,
-      session.answers
+      session.answers,
+      session.integrityState
     );
 
     SessionStorageService.updateSession(prev => ({

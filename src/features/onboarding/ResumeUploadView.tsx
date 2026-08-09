@@ -111,14 +111,38 @@ export const ResumeUploadView: React.FC = () => {
 
       {/* Error display */}
       {errorMessage && (
-        <div className="mt-6 p-4 rounded-xl bg-rose-950/40 border border-rose-800/40 text-rose-300 text-xs flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 shrink-0" />
-          <span>{errorMessage}</span>
+        <div className="mt-6 p-5 rounded-xl bg-rose-950/40 border border-rose-800/40 text-rose-300 text-xs">
+          <div className="flex items-start gap-3 mb-3">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-rose-200 mb-1">We couldn't reliably read this resume.</p>
+              <p className="text-rose-400/80">{errorMessage}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 pt-3 border-t border-rose-900/50">
+            <button
+              onClick={() => {
+                setSelectedFile(null);
+                setErrorMessage(null);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-rose-900/50 hover:bg-rose-800/50 text-rose-200 font-mono text-[11px]"
+            >
+              TRY AGAIN
+            </button>
+            <button
+              onClick={() => {
+                InterviewEngine.skipResumeUpload();
+              }}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[11px]"
+            >
+              CONTINUE WITHOUT RESUME
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Action Button */}
-      <div className="mt-8 flex justify-center">
+      {/* Action Buttons */}
+      <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
         <button
           disabled={!selectedFile || isProcessing}
           onClick={handleAnalyze}
@@ -127,7 +151,7 @@ export const ResumeUploadView: React.FC = () => {
           {isProcessing ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Analyzing Resume...</span>
+              <span>Extracting Resume Content...</span>
             </>
           ) : (
             <>
@@ -135,6 +159,13 @@ export const ResumeUploadView: React.FC = () => {
               <ArrowRight className="w-4 h-4" />
             </>
           )}
+        </button>
+
+        <button
+          onClick={() => InterviewEngine.skipResumeUpload()}
+          className="text-xs text-slate-400 hover:text-slate-200 transition-colors py-2 px-4"
+        >
+          Skip Resume & Set Up Role Directly
         </button>
       </div>
     </div>
