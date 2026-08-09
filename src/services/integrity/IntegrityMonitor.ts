@@ -116,6 +116,12 @@ export class IntegrityMonitor {
     );
   };
 
+  private static gracePeriodUntil: number = 0;
+
+  static acknowledgeGracePeriod(durationMs: number = 3000) {
+    this.gracePeriodUntil = Date.now() + durationMs;
+  }
+
   /**
    * Records an integrity violation, updates count, and enforces 3-state warning policy:
    * 0 -> NORMAL
@@ -128,10 +134,16 @@ export class IntegrityMonitor {
     severity: 'low' | 'medium' | 'high',
     details: string
   ) {
-    // Debounce duplicate events within 1500ms window (e.g. blur + visibilitychange firing together)
     const now = Date.now();
+
+    // Ignore events during grace period after candidate acknowledges warning modal
+    if (now < this.gracePeriodUntil) {
+      return;
+    }
+
+    // Debounce duplicate events within 2000ms window (e.g. blur + visibilitychange firing together)
     const lastTime = this.debounceTimers.get(type) || 0;
-    if (now - lastTime < 1500) {
+    if (now - lastTime < 2000) {
       return;
     }
     this.debounceTimers.set(type, now);

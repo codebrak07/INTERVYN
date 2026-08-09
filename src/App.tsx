@@ -165,6 +165,7 @@ export function App() {
       <IntegrityWarningModal
         integrityState={session.integrityState}
         onAcknowledge={() => {
+          IntegrityMonitor.acknowledgeGracePeriod(3000);
           SessionStorageService.updateSession(prev => ({
             ...prev,
             integrityState: {

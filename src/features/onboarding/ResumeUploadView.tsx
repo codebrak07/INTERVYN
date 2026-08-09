@@ -71,11 +71,10 @@ export const ResumeUploadView: React.FC = () => {
           onDragOver={e => e.preventDefault()}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${
-            selectedFile
-              ? 'border-cyan-600 bg-cyan-50/60 shadow-sm'
-              : 'border-slate-300 bg-slate-50/70 hover:border-cyan-600 hover:bg-cyan-50/40'
-          }`}
+          className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${selectedFile
+            ? 'border-cyan-600 bg-cyan-50/60 shadow-sm'
+            : 'border-slate-300 bg-slate-50/70 hover:border-cyan-600 hover:bg-cyan-50/40'
+            }`}
         >
           <input
             ref={fileInputRef}
