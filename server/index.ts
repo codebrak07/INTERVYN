@@ -42,6 +42,10 @@ app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`[EPHEMERAL API GATEWAY] Running stateless proxy server on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[EPHEMERAL API GATEWAY] Running stateless proxy server on http://localhost:${PORT}`);
+  });
+}
+
+export default app;
