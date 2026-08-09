@@ -37,8 +37,8 @@ app.get('/api/health', (req, res) => {
 // Serve compiled static assets from dist/
 app.use(express.static(distPath));
 
-// Fallback to index.html for Single Page Application (SPA) routing
-app.get('*', (req, res) => {
+// Fallback to index.html for Single Page Application (SPA) routing (Express 5 compatible)
+app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
