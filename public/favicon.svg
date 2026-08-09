@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Glowing Cyan Geometric Hexagonal Outer Ring -->
+  <polygon points="32,4 58,18 58,46 32,60 6,46 6,18" stroke="#22D3EE" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="#080A0D" fill-opacity="0.9" />
+  
+  <!-- Precision INTERVYN "I" Icon Stem -->
+  <path d="M32 16V48" stroke="#22D3EE" stroke-width="6" stroke-linecap="round" />
+  <circle cx="32" cy="16" r="3" fill="#10B981" />
+  <circle cx="32" cy="48" r="3" fill="#10B981" />
+  
+  <!-- Subtle Inner Energy Pulse Nodes -->
+  <path d="M22 32H42" stroke="#22D3EE" stroke-width="3" stroke-linecap="round" opacity="0.8" />
+</svg>

@@ -1,0 +1,61 @@
+/* Creative OS — THE INTERVYN FIELD Light Editorial Tokens */
+:root {
+  --intervyn-bg: #F5F6F3;
+  --intervyn-secondary: #EEF2F3;
+  --intervyn-surface: #FFFFFF;
+  --intervyn-elevated: #F8FAFC;
+
+  --intervyn-text: #0F172A;
+  --intervyn-muted: #64748B;
+
+  --intervyn-accent-cyan: #0891B2;
+  --intervyn-pale-blue: #DDF5F7;
+  --intervyn-accent-mint: #10B981;
+
+  --intervyn-outline: #E2E8F0;
+  --intervyn-outline-variant: #CBD5E1;
+
+  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--intervyn-bg);
+  color: var(--intervyn-text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.hairline-border {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.glow-active {
+  box-shadow: 0 10px 40px -10px rgba(15, 23, 42, 0.12);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--intervyn-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--intervyn-accent-cyan);
+}
