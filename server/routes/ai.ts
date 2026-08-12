@@ -12,7 +12,7 @@ import { logOperationalEvent } from '../middleware/logger';
 
 router.post('/analyze-resume', async (req: Request, res: Response) => {
   try {
-    const { resumeText, apiKey } = req.body;
+    const { resumeText, apiKey } = req.body || {};
     const headerKey = req.headers['x-groq-api-key'] as string;
     const activeKey = apiKey || headerKey;
 

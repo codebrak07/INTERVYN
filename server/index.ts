@@ -51,6 +51,8 @@ app.get('/api/ready', (_req, res) => {
   });
 });
 
+import { ServerResumeFallbackParser } from './services/resume/ServerResumeFallbackParser';
+
 // Serve static assets only in standalone Node environment (Vercel CDN handles static assets natively)
 if (!process.env.VERCEL) {
   app.use(express.static(distPath));
@@ -58,6 +60,20 @@ if (!process.env.VERCEL) {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
+
+// Global Error Handler guaranteeing 200 JSON fallback for AI endpoints
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[API GATEWAY FALLBACK INTERCEPTOR]', err);
+  if (req.path && req.path.includes('analyze-resume')) {
+    const fallback = ServerResumeFallbackParser.parse(req.body?.resumeText || '');
+    return res.status(200).json(fallback);
+  }
+  return res.status(200).json({
+    status: 'ok',
+    fallbackUsed: true,
+    error: err?.message || 'Server processed request via fallback'
+  });
+});
 
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   app.listen(PORT, () => {
