@@ -1,4 +1,5 @@
 import { AIProvider } from './AIProvider';
+import { ResumeFallbackParser } from '../resume/ResumeFallbackParser';
 import {
   CandidateProfile,
   TargetRole,
@@ -44,8 +45,8 @@ export class GroqProvider implements AIProvider {
       const res = await this.postGateway('analyze-resume', { resumeText });
       return { ...res, rawText: resumeText };
     } catch (e: any) {
-      console.error('Gateway error for analyzeResume:', e);
-      throw new Error(e.message || 'Failed to analyze resume via Groq API.');
+      console.warn('Gateway error for analyzeResume, executing local fallback extraction:', e);
+      return ResumeFallbackParser.parse(resumeText);
     }
   }
 
