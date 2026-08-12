@@ -24,9 +24,36 @@ const distPath = path.resolve(__dirname, '../dist');
 // Stateless Security & Ephemeral Middlewares
 app.use(securityHeaders);
 app.use(requestTracker);
-app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-groq-api-key', 'X-Request-Id']
+}));
+
+// Vercel Serverless & Standalone Node Compatible Body Parser Middleware
+app.use((req, res, next) => {
+  // If req.body is already parsed by Vercel Serverless runtime, skip re-parsing stream
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+    return next();
+  }
+  // Otherwise parse JSON stream safely with express.json
+  express.json({ limit: '10mb' })(req, res, (err) => {
+    if (err) {
+      console.warn('[BODY PARSER WARN]', err.message);
+    }
+    next();
+  });
+});
+
 app.use(rateLimiter);
+
+// Ensure URL routing compatibility on Vercel Serverless rewrites
+app.use((req, _res, next) => {
+  if (req.url && !req.url.startsWith('/api') && !req.url.startsWith('/_')) {
+    req.url = '/api' + (req.url.startsWith('/') ? '' : '/') + req.url;
+  }
+  next();
+});
 
 // API Routes
 app.use('/api/ai', aiRoutes);
