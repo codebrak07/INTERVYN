@@ -261,3 +261,66 @@ export interface InterviewSession {
   integrityState: IntegrityState;
 }
 
+export interface AssessmentEvidenceExecution {
+  visibleTestsPassed: number;
+  visibleTestsTotal: number;
+  hiddenTestsPassed: number;
+  hiddenTestsTotal: number;
+  totalTestsPassed: number;
+  totalTestsTotal: number;
+  runtimeMs: number;
+  memoryKb?: number;
+  executionStatus: 'PASSED' | 'FAILED' | 'SYNTAX_ERROR' | 'RUNTIME_ERROR' | 'TIMEOUT' | 'SOURCE_LIMIT' | 'OUTPUT_LIMIT' | 'EXECUTION_UNAVAILABLE' | 'NOT_ATTEMPTED';
+  submissionAttempts: number;
+  finalCode?: string;
+  isExecutionAvailable: boolean;
+}
+
+export interface AssessmentEvidenceObservation {
+  totalQuestionsProcessed: number;
+  voiceResponsesCount: number;
+  mcqAttemptedCount: number;
+  mcqCorrectCount: number;
+  submissionAttemptsCount: number;
+  integrityEventsCount: number;
+  integrityEvents: IntegrityEvent[];
+  warningCount: number;
+  cameraStatus: 'ACTIVE' | 'INACTIVE' | 'UNAVAILABLE';
+  screenShareStatus: 'ACTIVE' | 'INACTIVE' | 'UNAVAILABLE';
+  terminationStatus: 'NORMAL' | 'WARNING_1' | 'WARNING_2' | 'TERMINATED';
+  terminationReason?: string;
+  durationMs: number;
+  durationFormatted: string;
+  isDurationAvailable: boolean;
+}
+
+export interface AssessmentEvidenceInterpretation {
+  aiStatus: 'SUCCESS' | 'AI_RESPONSE_FAILED' | 'AI_AUTH_FAILED' | 'AI_RATE_LIMITED' | 'AI_UNAVAILABLE';
+  overallScore: number;
+  recommendation: 'strong_yes' | 'yes' | 'borderline' | 'no';
+  technicalScore: number;
+  communicationScore: number;
+  problemSolvingScore: number;
+  codingScore: number;
+  behavioralScore: number;
+  strengths: string[];
+  weaknesses: string[];
+  technicalGaps: string[];
+  interviewSummary: string;
+  codingAssessment: string;
+  hiringSignals: string[];
+  preparationPlan: string[];
+  evidence: string[];
+  isAiAvailable: boolean;
+}
+
+export interface AssessmentEvidence {
+  sessionId: string;
+  completedAt: string;
+  roleTitle: string;
+  candidateName?: string;
+  execution: AssessmentEvidenceExecution;
+  observation: AssessmentEvidenceObservation;
+  interpretation: AssessmentEvidenceInterpretation;
+}
+

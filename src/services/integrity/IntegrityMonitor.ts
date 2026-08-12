@@ -134,6 +134,8 @@ export class IntegrityMonitor {
     severity: 'low' | 'medium' | 'high',
     details: string
   ) {
+    if (!this.active) return;
+
     const now = Date.now();
 
     // Ignore events during grace period after candidate acknowledges warning modal

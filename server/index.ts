@@ -1,14 +1,17 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+// Load environment variables before importing routes that depend on process.env
+dotenv.config();
+
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { securityHeaders, zeroLogging } from './middleware/security';
+import { securityHeaders } from './middleware/security';
+import { requestTracker } from './middleware/logger';
 import { rateLimiter } from './middleware/rateLimit';
 import aiRoutes from './routes/ai';
 import codeRoutes from './routes/code';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,7 +23,7 @@ const distPath = path.resolve(__dirname, '../dist');
 
 // Stateless Security & Ephemeral Middlewares
 app.use(securityHeaders);
-app.use(zeroLogging);
+app.use(requestTracker);
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimiter);
@@ -29,18 +32,32 @@ app.use(rateLimiter);
 app.use('/api/ai', aiRoutes);
 app.use('/api/code', codeRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', ephemeralGateway: true, timestamp: new Date().toISOString() });
+// Health & Readiness Endpoints (Operational Telemetry Only - Zero Secrets Exposed)
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'intervyn-api',
+    environment: process.env.NODE_ENV || 'production',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Serve compiled static assets from dist/
-app.use(express.static(distPath));
-
-// Fallback to index.html for Single Page Application (SPA) routing (Express 5 compatible)
-app.use((req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
+app.get('/api/ready', (_req, res) => {
+  res.json({
+    status: 'ready',
+    groqProvider: 'available',
+    codeExecutionEngine: 'available',
+    rateLimiter: 'best-effort-instance-local'
+  });
 });
+
+// Serve static assets only in standalone Node environment (Vercel CDN handles static assets natively)
+if (!process.env.VERCEL) {
+  app.use(express.static(distPath));
+  app.use((req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   app.listen(PORT, () => {

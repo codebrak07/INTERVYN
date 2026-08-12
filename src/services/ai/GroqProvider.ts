@@ -24,7 +24,16 @@ export class GroqProvider implements AIProvider {
     });
 
     if (!res.ok) {
-      throw new Error(`API Gateway error: ${res.statusText}`);
+      let errDetail = res.statusText || `HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson && errJson.error) {
+          errDetail = errJson.error;
+        }
+      } catch {
+        // Response wasn't JSON
+      }
+      throw new Error(`API Gateway error (${res.status}): ${errDetail}`);
     }
 
     return await res.json();
@@ -34,22 +43,9 @@ export class GroqProvider implements AIProvider {
     try {
       const res = await this.postGateway('analyze-resume', { resumeText });
       return { ...res, rawText: resumeText };
-    } catch (e) {
-      console.warn('Gateway fallback for analyzeResume:', e);
-      return {
-        skills: ['JavaScript', 'TypeScript', 'React', 'Node.js', 'System Architecture'],
-        projects: [
-          { title: 'High-Scale Web Application', description: 'Built modular frontend state platform.', tech: ['React', 'TypeScript'] }
-        ],
-        experience: [{ role: 'Senior Software Engineer', company: 'Tech Inc', highlights: ['Optimized rendering vitals by 40%'] }],
-        education: [{ degree: 'B.S. Computer Science', institution: 'State University' }],
-        technologies: ['React', 'TypeScript', 'Node.js', 'REST APIs'],
-        achievements: ['Delivered zero-downtime release'],
-        claims: ['Scaled React app to 50k DAU'],
-        potentialQuestions: ['How did you achieve a 40% performance gain?'],
-        weakAreas: ['Micro-frontend isolation', 'Server rendering hydration'],
-        rawText: resumeText
-      };
+    } catch (e: any) {
+      console.error('Gateway error for analyzeResume:', e);
+      throw new Error(e.message || 'Failed to analyze resume via Groq API.');
     }
   }
 

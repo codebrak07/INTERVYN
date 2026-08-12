@@ -7,84 +7,90 @@ const groq = new ServerGroqProvider();
 // Store generated hidden test cases in ephemeral memory keyed by problemId
 export const ephemeralHiddenTestMap = new Map<string, any[]>();
 
+import { logOperationalEvent } from '../middleware/logger';
+
 router.post('/analyze-resume', async (req: Request, res: Response) => {
   try {
     const { resumeText, apiKey } = req.body;
     const headerKey = req.headers['x-groq-api-key'] as string;
     const activeKey = apiKey || headerKey;
 
-    if (!resumeText) return res.status(400).json({ error: 'resumeText is required' });
+    if (!resumeText || typeof resumeText !== 'string' || resumeText.trim().length === 0) {
+      return res.status(400).json({ error: 'Resume text is required for parsing.' });
+    }
 
-    const prompt = `Analyze this candidate resume and extract a clean structured JSON profile.
-Resume text:
-"""
-${resumeText.slice(0, 8000)}
-"""
+    logOperationalEvent('RESUME_ANALYSIS_STARTED', { textLength: resumeText.length });
 
-Return JSON format:
+    const prompt = `Analyze this technical candidate resume and extract claims, skills, projects, and technologies.
+Return ONLY valid JSON matching this schema:
 {
-  "skills": ["string", ...],
-  "projects": [{"title": "...", "description": "...", "tech": ["..."]}],
-  "experience": [{"role": "...", "company": "...", "highlights": ["..."]}],
-  "education": [{"degree": "...", "institution": "..."}],
+  "name": "Candidate Name or Unknown",
+  "skills": ["skill1", "skill2"],
+  "projects": [{ "title": "...", "description": "...", "tech": ["..."] }],
+  "experience": [{ "role": "...", "company": "...", "highlights": ["..."] }],
+  "education": [{ "degree": "...", "institution": "..." }],
   "technologies": ["..."],
   "achievements": ["..."],
   "claims": ["..."],
-  "potentialQuestions": ["Question 1", "Question 2"],
-  "weakAreas": ["Target probing area"]
-}`;
+  "potentialQuestions": ["..."],
+  "weakAreas": ["..."]
+}
+
+Resume Content:
+${resumeText.slice(0, 10000)}`;
 
     const data = await groq.callGroq(
       [
-        { role: 'system', content: 'You are an elite executive technical recruiter.' },
+        { role: 'system', content: 'You are an executive technical resume analyzer extracting structured candidate evidence.' },
         { role: 'user', content: prompt }
       ],
       true,
-      activeKey
+      activeKey,
+      'analyze_resume'
     );
-
+    logOperationalEvent('RESUME_ANALYSIS_COMPLETED', { skillsExtracted: (data.skills || []).length });
     return res.json(data);
   } catch (err: any) {
-    console.error('Resume AI analysis failed:', err.message);
-    return res.status(500).json({ error: `Resume AI analysis failed: ${err.message || 'AI provider error'}` });
+    logOperationalEvent('RESUME_ANALYSIS_FAILED', { errorMsg: err.message });
+    return res.status(500).json({ error: 'Resume analysis failed: ' + err.message });
   }
 });
 
 router.post('/analyze-role', async (req: Request, res: Response) => {
   try {
     const { profile, targetRole } = req.body;
-    const prompt = `Evaluate candidate fit for role "${targetRole.title}".
-Candidate skills: ${(profile.skills || []).join(', ')}
-Job Description: ${targetRole.jobDescription || 'Standard ' + targetRole.title}
+    const roleTitle = targetRole?.title || 'Software Engineer';
+    const skills = (profile?.skills || []).join(', ');
+
+    const prompt = `Evaluate candidate skill match for target role "${roleTitle}".
+Candidate skills: ${skills || 'General Engineering'}
 
 Return JSON format:
 {
-  "overallMatch": 86,
-  "technicalMatch": 88,
-  "experienceMatch": 84,
-  "projectMatch": 87,
-  "skillMatch": 85,
-  "missingSkills": ["GraphQL", "Docker"],
-  "likelyInterviewTopics": ["React Fiber", "DOM Performance", "Event Loop"],
-  "likelyCodingTopics": ["Debounce/Throttle", "LRU Cache"]
+  "overallMatch": number (0-100),
+  "technicalMatch": number (0-100),
+  "experienceMatch": number (0-100),
+  "projectMatch": number (0-100),
+  "skillMatch": number (0-100),
+  "missingSkills": ["skill1", "skill2"],
+  "likelyInterviewTopics": ["topic1", "topic2"],
+  "likelyCodingTopics": ["topic1", "topic2"]
 }`;
 
-    const data = await groq.callGroq([
-      { role: 'system', content: 'You are an interview architect evaluating job match.' },
-      { role: 'user', content: prompt }
-    ]);
+    const data = await groq.callGroq(
+      [
+        { role: 'system', content: 'You are a senior hiring bar raiser evaluating candidate role fit.' },
+        { role: 'user', content: prompt }
+      ],
+      true,
+      req.body?.apiKey || (req.headers['x-groq-api-key'] as string),
+      'analyze_role'
+    );
+    logOperationalEvent('ROLE_MATCH_ANALYZED', { roleTitle });
     return res.json(data);
-  } catch (err) {
-    return res.json({
-      overallMatch: 86,
-      technicalMatch: 88,
-      experienceMatch: 84,
-      projectMatch: 87,
-      skillMatch: 85,
-      missingSkills: ['GraphQL Federation', 'Distributed Caching'],
-      likelyInterviewTopics: ['React Concurrent Rendering', 'State Hydration', 'DOM Virtualization'],
-      likelyCodingTopics: ['Debounce Implementation', 'Deep Clone Object']
-    });
+  } catch (err: any) {
+    logOperationalEvent('ROLE_MATCH_FAILED', { errorMsg: err.message });
+    return res.status(500).json({ error: 'Role analysis failed: ' + err.message });
   }
 });
 
@@ -95,6 +101,8 @@ router.post('/blueprint', sessionDailyLimiter, async (req: Request, res: Respons
     const { profile, targetRole } = req.body;
     const roleTitle = targetRole?.title || 'Software Engineer';
     const skills = (profile?.skills || []).join(', ');
+
+    logOperationalEvent('INTERVIEW_SESSION_INITIATED', { roleTitle });
 
     const prompt = `Design an adaptive interview blueprint for role "${roleTitle}" with candidate skills: ${skills || 'General Engineering'}.
 Return JSON format:
@@ -111,12 +119,19 @@ Return JSON format:
   ]
 }`;
 
-    const data = await groq.callGroq([
-      { role: 'system', content: 'You are an executive technical interview architect.' },
-      { role: 'user', content: prompt }
-    ]);
+    const data = await groq.callGroq(
+      [
+        { role: 'system', content: 'You are an executive technical interview architect.' },
+        { role: 'user', content: prompt }
+      ],
+      true,
+      req.body?.apiKey || (req.headers['x-groq-api-key'] as string),
+      'generate_blueprint'
+    );
+    logOperationalEvent('BLUEPRINT_GENERATED', { roleTitle });
     return res.json(data);
-  } catch (err) {
+  } catch (err: any) {
+    logOperationalEvent('BLUEPRINT_GENERATION_FAILED', { errorMsg: err?.message });
     const roleTitle = req.body.targetRole?.title || 'Software Engineer';
     return res.json({
       roleTitle,
@@ -207,10 +222,15 @@ Return JSON format:
   ]
 }`;
 
-    const data = await groq.callGroq([
-      { role: 'system', content: 'You are an interview question generator creating realistic technical interviews.' },
-      { role: 'user', content: prompt }
-    ]);
+    const data = await groq.callGroq(
+      [
+        { role: 'system', content: 'You are an interview question generator creating realistic technical interviews.' },
+        { role: 'user', content: prompt }
+      ],
+      true,
+      req.body?.apiKey || (req.headers['x-groq-api-key'] as string),
+      'generate_questions'
+    );
 
     const sanitizedQuestions = (data.questions || []).map((q: any) => {
       if (q.codingProblem && q.codingProblem.hiddenTests) {
@@ -222,8 +242,10 @@ Return JSON format:
       return q;
     });
 
+    logOperationalEvent('QUESTIONS_GENERATED', { count: sanitizedQuestions.length });
     return res.json({ questions: sanitizedQuestions });
-  } catch (err) {
+  } catch (err: any) {
+    logOperationalEvent('QUESTIONS_GENERATION_FAILED', { errorMsg: err?.message });
     const defaultHidden = [
       { id: 'h1', description: 'Duplicate values [3, 3], target 6', input: '[[3, 3], 6]', expectedOutput: '[0,1]', isHidden: true }
     ];
@@ -311,12 +333,19 @@ Return JSON format:
   "difficultyAdjustment": "INCREASE" | "DECREASE" | "MAINTAIN"
 }`;
 
-    const data = await groq.callGroq([
-      { role: 'system', content: 'You are a rigorous technical interviewer evaluating answers based on domain correctness.' },
-      { role: 'user', content: prompt }
-    ]);
+    const data = await groq.callGroq(
+      [
+        { role: 'system', content: 'You are a rigorous technical interviewer evaluating answers based on domain correctness.' },
+        { role: 'user', content: prompt }
+      ],
+      true,
+      req.body?.apiKey || (req.headers['x-groq-api-key'] as string),
+      'evaluate_answer'
+    );
+    logOperationalEvent('ANSWER_EVALUATED', { questionType: req.body.question?.type });
     return res.json(data);
-  } catch (err) {
+  } catch (err: any) {
+    logOperationalEvent('ANSWER_EVALUATION_FAILED', { errorMsg: err?.message });
     const answerLen = (req.body.userAnswer || '').length;
     const score = Math.min(92, Math.max(55, Math.floor(60 + answerLen / 12)));
     return res.json({
@@ -380,16 +409,20 @@ Return ONLY JSON format matching this exact schema:
   "evidence": ["Evidence point 1 derived from answers", "Evidence point 2 derived from code"]
 }`;
 
+    logOperationalEvent('FINAL_REPORT_STARTED', { roleTitle: targetRole?.title });
     const data = await groq.callGroq(
       [
         { role: 'system', content: 'You are an executive hiring bar raiser synthesizing interview evidence into an objective hiring decision dossier.' },
         { role: 'user', content: prompt }
       ],
       true,
-      activeKey
+      activeKey,
+      'final_report'
     );
+    logOperationalEvent('INTERVIEW_COMPLETED', { recommendation: data?.recommendation, overallScore: data?.overallScore });
     return res.json(data);
   } catch (err: any) {
+    logOperationalEvent('FINAL_REPORT_FAILED', { errorMsg: err?.message });
     const { answers, integrityState } = req.body;
     const scores = (answers || []).map((a: any) => a.evaluation?.score || 70);
     const avgScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 70;

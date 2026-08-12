@@ -4,8 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "tsx server/index.ts & vite",
+    "start": "tsx server/index.ts & vite",
     "server": "tsx server/index.ts",
+    "backend": "tsx server/index.ts",
+    "frontend": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

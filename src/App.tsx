@@ -39,8 +39,20 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    // Start integrity monitoring when interview starts
-    if (session.currentPhase !== 'LANDING' && session.currentPhase !== 'REPORT') {
+    // Start integrity monitoring ONLY during active interview rounds (not during resume/role setup)
+    const isInterviewActive =
+      session.currentPhase === 'QUESTION_VOICE' ||
+      session.currentPhase === 'LISTENING' ||
+      session.currentPhase === 'TRANSCRIBING' ||
+      session.currentPhase === 'EVALUATING' ||
+      session.currentPhase === 'MCQ_ROUND' ||
+      session.currentPhase === 'BEHAVIORAL_ROUND' ||
+      session.currentPhase === 'CODING_TRANSITION' ||
+      session.currentPhase === 'CODING_ARENA' ||
+      session.currentPhase === 'RUNNING_TESTS' ||
+      session.currentPhase === 'SUBMITTING_HIDDEN';
+
+    if (isInterviewActive) {
       IntegrityMonitor.startMonitoring();
     } else {
       IntegrityMonitor.stopMonitoring();
@@ -164,6 +176,7 @@ export function App() {
 
       <IntegrityWarningModal
         integrityState={session.integrityState}
+        currentPhase={session.currentPhase}
         onAcknowledge={() => {
           IntegrityMonitor.acknowledgeGracePeriod(3000);
           SessionStorageService.updateSession(prev => ({

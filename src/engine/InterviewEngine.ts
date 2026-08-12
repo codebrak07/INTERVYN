@@ -28,6 +28,11 @@ export class InterviewEngine {
         candidateProfile: profile,
         resumeParseStatus: 'PARSED',
         currentPhase: 'ROLE_SETUP',
+        integrityState: {
+          violationsCount: 0,
+          status: 'NORMAL',
+          events: []
+        }
       }));
       return profile;
     } catch (err) {
@@ -93,6 +98,11 @@ export class InterviewEngine {
       ...prev,
       startedAt: Date.now(),
       currentPhase: firstQ ? this.getPhaseForQuestionType(firstQ.type) : 'QUESTION_VOICE',
+      integrityState: {
+        violationsCount: 0,
+        status: 'NORMAL',
+        events: []
+      }
     }));
   }
 

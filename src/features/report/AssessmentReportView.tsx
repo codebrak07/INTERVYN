@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Award, CheckCircle2, AlertTriangle, Download, Copy, RefreshCcw, Sparkles, Code, FileText, Check, ShieldAlert, ChevronDown, ChevronUp, Cpu, Eye, BrainCircuit } from 'lucide-react';
 import { FinalReport } from '../../types';
 import { SessionStorageService } from '../../services/storage/SessionStorageService';
+import { AssessmentEvidenceService } from '../../services/evidence/AssessmentEvidenceService';
+import { PdfExportService } from '../../services/export/PdfExportService';
 
 interface AssessmentReportViewProps {
   report: FinalReport;
@@ -10,6 +12,12 @@ interface AssessmentReportViewProps {
 export const AssessmentReportView: React.FC<AssessmentReportViewProps> = ({ report }) => {
   const [copied, setCopied] = useState(false);
   const [expandedSection, setExpandedSection] = useState<'coding' | 'comm' | 'integrity' | 'all' | null>('coding');
+  const [exportError, setExportError] = useState<string[] | null>(null);
+
+  // Single Authoritative Source of Truth
+  const session = SessionStorageService.getSession();
+  const evidence = AssessmentEvidenceService.buildAssessmentEvidence(session, report);
+  const validation = AssessmentEvidenceService.validateAssessmentEvidence(evidence);
 
   const getRecommendationBadge = (rec: FinalReport['recommendation']) => {
     switch (rec) {
@@ -24,25 +32,26 @@ export const AssessmentReportView: React.FC<AssessmentReportViewProps> = ({ repo
     }
   };
 
-  const badge = getRecommendationBadge(report.recommendation);
+  const badge = getRecommendationBadge(evidence.interpretation.recommendation);
 
   const handleCopySummary = () => {
     const summaryText = `INTERVYN Executive Technical Hiring Dossier
-Role: ${report.roleTitle}
-Overall Score: ${report.overallScore}/100
+Role: ${evidence.roleTitle}
+Overall Score: ${evidence.interpretation.overallScore}/100
 Recommendation: ${badge.label}
-Integrity Status: ${report.integrityStatus || 'NORMAL'}
+Integrity Status: ${evidence.observation.terminationStatus}
 
 01 / EXECUTION:
-- Correctness: ${report.codingPerformance ? `${report.codingPerformance.visibleTestsPassed}/${report.codingPerformance.visibleTestsTotal} visible, ${report.codingPerformance.hiddenTestsPassed}/${report.codingPerformance.hiddenTestsTotal} hidden passed` : 'Evaluated'}
-- Runtime: ${report.codingPerformance?.timeComplexity || '142ms'}
+- Correctness: ${evidence.execution.visibleTestsPassed}/${evidence.execution.visibleTestsTotal} visible, ${evidence.execution.hiddenTestsPassed}/${evidence.execution.hiddenTestsTotal} hidden passed
+- Runtime: ${evidence.execution.runtimeMs}ms (${evidence.execution.executionStatus})
 
 02 / OBSERVATION:
-- Observed Events: ${report.integrityEventsCount || 0} integrity events recorded
-- Spoken Responses: ${report.questionsAnsweredCount} questions answered
+- Observed Events: ${evidence.observation.integrityEventsCount} integrity events recorded
+- Spoken Responses: ${evidence.observation.voiceResponsesCount} voice answers
+- Duration: ${evidence.observation.durationFormatted}
 
 03 / INTERPRETATION:
-${report.interviewSummary}
+${evidence.interpretation.interviewSummary}
 `;
     navigator.clipboard.writeText(summaryText);
     setCopied(true);
@@ -50,17 +59,41 @@ ${report.interviewSummary}
   };
 
   const handleExportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(report, null, 2));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(evidence, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `INTERVYN_Executive_Dossier_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `INTERVYN_Assessment_Evidence_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
   };
 
+  const handleExportPDF = () => {
+    setExportError(null);
+    const result = PdfExportService.exportPdf(evidence);
+    if (!result.success && result.errors) {
+      setExportError(result.errors);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
+      {/* Evidence Consistency Warning Banner if validation failed */}
+      {(!validation.isValid || exportError) && (
+        <div className="mb-8 p-5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 font-mono text-xs shadow-md">
+          <div className="flex items-center gap-2 text-rose-700 font-bold mb-2 text-sm">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-rose-600" />
+            <span>ASSESSMENT CONSISTENCY ERROR — PDF EXPORT BLOCKED</span>
+          </div>
+          <p className="text-rose-900 mb-2">The final evidence object contains conflicting session facts. PDF generation is blocked until state is consistent.</p>
+          <ul className="list-disc pl-5 space-y-1 text-[11px] text-rose-800">
+            {(exportError || validation.errors).map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Header Dossier Title */}
       <div className="text-center mb-10">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-800/40 text-cyan-400 text-xs font-mono mb-4">
@@ -68,15 +101,15 @@ ${report.interviewSummary}
           <span>INTERVYN EXECUTIVE ASSESSMENT DOSSIER</span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl font-bold text-white mb-3 font-serif italic">
-          {report.roleTitle}
+        <h1 className="text-4xl sm:text-5xl font-bold text-[#0F172A] mb-3 font-serif italic">
+          {evidence.roleTitle}
         </h1>
         <div className="flex items-center justify-center gap-4 text-xs font-mono text-slate-400">
           <span className="text-emerald-400 font-semibold border border-emerald-800/40 px-2 py-0.5 rounded bg-emerald-950/20">
             EXECUTION VERIFIED
           </span>
           <span className="text-cyan-400 font-semibold border border-cyan-800/40 px-2 py-0.5 rounded bg-cyan-950/20">
-            AI EVALUATED
+            {evidence.interpretation.isAiAvailable ? 'AI EVALUATED' : 'AI RESPONSE FAILED'}
           </span>
           <span className="text-purple-400 font-semibold border border-purple-800/40 px-2 py-0.5 rounded bg-purple-950/20">
             EVIDENCE AVAILABLE
@@ -85,16 +118,16 @@ ${report.interviewSummary}
       </div>
 
       {/* Integrity Status Alert Banner if warning or terminated */}
-      {report.integrityStatus && report.integrityStatus !== 'NORMAL' && (
+      {evidence.observation.terminationStatus !== 'NORMAL' && (
         <div className={`mb-8 p-4 rounded-2xl border flex items-center gap-3 text-xs font-mono ${
-          report.integrityStatus === 'TERMINATED'
+          evidence.observation.terminationStatus === 'TERMINATED'
             ? 'bg-rose-950/40 border-rose-800 text-rose-300'
             : 'bg-amber-950/40 border-amber-800 text-amber-300'
         }`}>
           <ShieldAlert className="w-5 h-5 shrink-0" />
           <div>
-            <span className="font-bold block">INTEGRITY STATUS: {report.integrityStatus}</span>
-            <span>Recorded violations count: {report.integrityEventsCount || 0}. Evidence captured ephemerally prior to teardown.</span>
+            <span className="font-bold block">INTEGRITY STATUS: {evidence.observation.terminationStatus}</span>
+            <span>Recorded violations count: {evidence.observation.integrityEventsCount}. {evidence.observation.terminationReason || 'Evidence captured ephemerally prior to teardown.'}</span>
           </div>
         </div>
       )}
@@ -104,7 +137,7 @@ ${report.interviewSummary}
         <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 text-center flex flex-col items-center justify-center">
           <span className="text-xs font-mono text-slate-400 uppercase tracking-widest mb-2">Overall Score</span>
           <div className="text-6xl font-extrabold text-white mb-2 font-mono">
-            {report.overallScore} <span className="text-2xl font-normal text-slate-500">/ 100</span>
+            {evidence.interpretation.overallScore} <span className="text-2xl font-normal text-slate-500">/ 100</span>
           </div>
           <span className="text-xs font-mono text-slate-400">Evidence-Weighted Synthesis</span>
         </div>
@@ -119,10 +152,10 @@ ${report.interviewSummary}
 
         <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 text-center flex flex-col items-center justify-center">
           <span className="text-xs font-mono text-slate-400 uppercase tracking-widest mb-2">Interview Telemetry</span>
-          <div className="text-3xl font-bold text-white mb-1 font-mono">
-            {Math.round(report.totalDurationSeconds / 60)} <span className="text-sm font-normal text-slate-400">mins</span>
+          <div className="text-2xl font-bold text-white mb-1 font-mono">
+            {evidence.observation.durationFormatted}
           </div>
-          <span className="text-xs font-mono text-slate-400">{report.questionsAnsweredCount} Questions Processed</span>
+          <span className="text-xs font-mono text-slate-400">{evidence.observation.totalQuestionsProcessed} Questions Processed</span>
         </div>
       </div>
 
@@ -149,21 +182,21 @@ ${report.interviewSummary}
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
               <div className="text-slate-400 text-[10px] uppercase mb-1">Visible Test Results</div>
               <div className="text-emerald-400 font-bold text-sm">
-                {report.codingPerformance ? `${report.codingPerformance.visibleTestsPassed} / ${report.codingPerformance.visibleTestsTotal} Passed` : '3 / 3 Passed'}
+                {evidence.execution.visibleTestsPassed} / {evidence.execution.visibleTestsTotal} Passed
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
               <div className="text-slate-400 text-[10px] uppercase mb-1">Hidden Test Results</div>
               <div className="text-emerald-400 font-bold text-sm">
-                {report.codingPerformance ? `${report.codingPerformance.hiddenTestsPassed} / ${report.codingPerformance.hiddenTestsTotal} Passed` : '2 / 2 Passed'}
+                {evidence.execution.hiddenTestsPassed} / {evidence.execution.hiddenTestsTotal} Passed
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-              <div className="text-slate-400 text-[10px] uppercase mb-1">Runtime & Memory</div>
+              <div className="text-slate-400 text-[10px] uppercase mb-1">Runtime & Status</div>
               <div className="text-cyan-400 font-bold text-sm">
-                {report.codingPerformance?.timeComplexity || '142ms isolated execution'}
+                {evidence.execution.runtimeMs}ms ({evidence.execution.executionStatus})
               </div>
             </div>
           </div>
@@ -184,17 +217,17 @@ ${report.interviewSummary}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs text-slate-300">
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
               <div className="text-slate-400 text-[10px] uppercase mb-1">Code Attempts & Edits</div>
-              <div className="text-slate-200 font-semibold">Candidate made 2 submission attempts</div>
+              <div className="text-slate-200 font-semibold">{evidence.observation.submissionAttemptsCount} submission attempt(s)</div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
               <div className="text-slate-400 text-[10px] uppercase mb-1">Spoken Voice Responses</div>
-              <div className="text-slate-200 font-semibold">{report.questionsAnsweredCount} answers recorded & transcribed</div>
+              <div className="text-slate-200 font-semibold">{evidence.observation.voiceResponsesCount} voice answer(s) recorded</div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
               <div className="text-slate-400 text-[10px] uppercase mb-1">Integrity Events</div>
-              <div className="text-slate-200 font-semibold">{report.integrityEventsCount || 0} events observed during session</div>
+              <div className="text-slate-200 font-semibold">{evidence.observation.integrityEventsCount} event(s) observed</div>
             </div>
           </div>
         </div>
@@ -207,17 +240,17 @@ ${report.interviewSummary}
               <span>03 / INTERPRETATION — Groq AI Evidence Synthesis</span>
             </div>
             <span className="text-[10px] font-mono text-purple-400 bg-purple-950 border border-purple-800 px-2 py-0.5 rounded">
-              AI GROUNDED SYNTHESIS
+              {evidence.interpretation.aiStatus}
             </span>
           </div>
 
           <p className="text-xs text-slate-300 leading-relaxed font-sans mb-4">
-            {report.interviewSummary}
+            {evidence.interpretation.interviewSummary}
           </p>
 
           <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-400">
             <div className="text-purple-300 font-semibold mb-1">Derived Hiring Signal:</div>
-            <div>{report.codingAssessment}</div>
+            <div>{evidence.interpretation.codingAssessment}</div>
           </div>
         </div>
       </div>
@@ -289,28 +322,28 @@ ${report.interviewSummary}
 
       {/* Strengths & Weaknesses */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-800/40">
-          <h3 className="text-xs font-mono uppercase tracking-widest text-emerald-400 mb-4 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4" /> Key Candidate Strengths
+        <div className="p-6 rounded-2xl bg-emerald-50/90 border border-emerald-200 shadow-sm">
+          <h3 className="text-xs font-mono uppercase tracking-widest text-emerald-950 font-bold mb-4 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Key Candidate Strengths
           </h3>
-          <ul className="space-y-2 text-xs text-slate-200">
+          <ul className="space-y-2 text-xs text-emerald-900 font-medium">
             {(report.strengths || []).map((st, idx) => (
               <li key={idx} className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-1.5 shrink-0" />
                 <span>{st}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="p-6 rounded-2xl bg-amber-950/20 border border-amber-800/40">
-          <h3 className="text-xs font-mono uppercase tracking-widest text-amber-400 mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" /> Areas for Development & Technical Gaps
+        <div className="p-6 rounded-2xl bg-amber-50/90 border border-amber-200 shadow-sm">
+          <h3 className="text-xs font-mono uppercase tracking-widest text-amber-950 font-bold mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600" /> Areas for Development & Technical Gaps
           </h3>
-          <ul className="space-y-2 text-xs text-slate-200">
+          <ul className="space-y-2 text-xs text-amber-900 font-medium">
             {(report.weaknesses || []).concat(report.technicalGaps || []).map((wk, idx) => (
               <li key={idx} className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mt-1.5 shrink-0" />
                 <span>{wk}</span>
               </li>
             ))}
@@ -319,13 +352,13 @@ ${report.interviewSummary}
       </div>
 
       {/* Actionable Preparation Plan */}
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 mb-8">
-        <h3 className="text-xs font-mono uppercase tracking-widest text-cyan-400 mb-4 flex items-center gap-2">
+      <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm mb-8">
+        <h3 className="text-xs font-mono uppercase tracking-widest text-[#0891B2] font-bold mb-4 flex items-center gap-2">
           <Sparkles className="w-4 h-4" /> Targeted Preparation Plan
         </h3>
         <div className="space-y-2.5">
           {(report.preparationPlan || []).map((step, idx) => (
-            <div key={idx} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 font-mono">
+            <div key={idx} className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white font-mono font-medium">
               {step}
             </div>
           ))}
@@ -334,14 +367,15 @@ ${report.interviewSummary}
 
       {/* Evidence Log */}
       {report.evidence && report.evidence.length > 0 && (
-        <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 mb-8">
-          <h3 className="text-xs font-mono uppercase tracking-widest text-slate-400 mb-4">
+        <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm mb-8">
+          <h3 className="text-xs font-mono uppercase tracking-widest text-[#0F172A] font-bold mb-4">
             Grounding Evidence Log
           </h3>
-          <div className="space-y-1.5 font-mono text-[11px] text-slate-400 max-h-40 overflow-y-auto">
+          <div className="space-y-2 font-mono text-xs text-[#334155] max-h-48 overflow-y-auto">
             {report.evidence.map((ev, idx) => (
-              <div key={idx} className="py-1 border-b border-slate-800/40">
-                • {ev}
+              <div key={idx} className="py-1.5 border-b border-slate-100 flex items-start gap-2">
+                <span className="text-[#0891B2] font-bold">•</span>
+                <span>{ev}</span>
               </div>
             ))}
           </div>
@@ -349,23 +383,32 @@ ${report.interviewSummary}
       )}
 
       {/* Actions Row */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-slate-300">
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => window.print()} className="btn-secondary text-xs px-4 py-2.5">
-            <FileText className="w-4 h-4 text-cyan-400" /> Export PDF
+          <button
+            onClick={handleExportPDF}
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-[#0F172A] hover:bg-slate-50 font-bold text-xs shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-[#0891B2]" /> Export PDF
           </button>
-          <button onClick={handleExportJSON} className="btn-secondary text-xs px-4 py-2.5">
-            <Download className="w-4 h-4 text-violet-400" /> Export JSON
+          <button
+            onClick={handleExportJSON}
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-[#0F172A] hover:bg-slate-50 font-bold text-xs shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-purple-600" /> Export JSON
           </button>
-          <button onClick={handleCopySummary} className="btn-secondary text-xs px-4 py-2.5">
-            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
+          <button
+            onClick={handleCopySummary}
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-[#0F172A] hover:bg-slate-50 font-bold text-xs shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+          >
+            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-600" />}
             <span>{copied ? 'Copied!' : 'Copy Dossier'}</span>
           </button>
         </div>
 
         <button
           onClick={() => SessionStorageService.clearSessionData()}
-          className="btn-primary text-xs px-6 py-2.5 flex items-center gap-2"
+          className="px-6 py-2.5 rounded-xl bg-[#0891B2] hover:bg-cyan-700 active:bg-cyan-800 text-white font-bold text-xs shadow-md flex items-center gap-2 transition-all cursor-pointer"
         >
           <RefreshCcw className="w-4 h-4" />
           <span>Clear & Start New Session</span>
